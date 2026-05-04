@@ -96,16 +96,50 @@ export function getBaremTier(salePrice: number): 1 | 2 | 3 {
   return 3;
 }
 
-export function getShippingCost(companyId: string, desi: number, salePrice: number): number | null {
+function getRowByDesi(companyId: string, desi: number): DesiRow | null {
   const company = SHIPPING_COMPANIES.find((c) => c.id === companyId);
   if (!company) return null;
-
-  const tier = getBaremTier(salePrice);
   const sorted = [...company.rows].sort((a, b) => a.desiRange[1] - b.desiRange[1]);
-  const row = sorted.find((r) => desi <= r.desiRange[1]) ?? sorted[sorted.length - 1];
+  return sorted.find((r) => desi <= r.desiRange[1]) ?? sorted[sorted.length - 1] ?? null;
+}
 
+export function getShippingCost(companyId: string, desi: number, salePrice: number): number | null {
+  const row = getRowByDesi(companyId, desi);
   if (!row) return null;
+  const tier = getBaremTier(salePrice);
   if (tier === 1) return row.barem1Price;
   if (tier === 2) return row.barem2Price;
   return row.barem3Price;
+}
+
+export function getShippingCostByBarem(companyId: string, desi: number, barem: 1 | 2 | 3): number | null {
+  const row = getRowByDesi(companyId, desi);
+  if (!row) return null;
+  if (barem === 1) return row.barem1Price;
+  if (barem === 2) return row.barem2Price;
+  return row.barem3Price;
+}
+
+export function calcTargetSalePrice(
+  purchaseCost: number,
+  targetMode: "percent" | "tl",
+  targetValue: number,
+  commissionRate: number,
+  companyId: string,
+  desi: number
+): number {
+  let barem: 1 | 2 | 3 = 1;
+  for (let i = 0; i < 3; i++) {
+    const shipping = getShippingCostByBarem(companyId, desi, barem) ?? 0;
+    const commFrac = commissionRate / 100;
+    const sp =
+      targetMode === "percent"
+        ? (shipping + purchaseCost) / (1 - commFrac - targetValue / 100)
+        : (targetValue + shipping + purchaseCost) / (1 - commFrac);
+    if (!isFinite(sp) || sp <= 0) return 0;
+    const newBarem = getBaremTier(sp);
+    if (newBarem === barem) return sp;
+    barem = newBarem;
+  }
+  return 0;
 }
