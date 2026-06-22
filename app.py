@@ -16,7 +16,7 @@ def verileri_yukle(worksheet_adi):
 try:
     # Google Sheets'ten verileri canlı çekiyoruz
     df_musteri = verileri_yukle("Form Yanıtları 1")
-    # Sizin tablonuzdaki tam adı 'Ürün_Listesi' olduğu için burayı güncelledik:
+    # Tablonuzdaki sekme adı 'Ürün_Listesi' olduğu için burası güncellendi:
     df_urunler = verileri_yukle("Ürün_Listesi")
 except Exception as e:
     st.error("Google Sheets bağlantısı kurulamadı. Lütfen Secrets ayarlarını ve tablonuzdaki sekme isimlerini kontrol edin!")
