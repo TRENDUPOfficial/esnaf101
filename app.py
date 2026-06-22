@@ -7,14 +7,14 @@ from datetime import datetime
 st.set_page_config(page_title="Esnaf101 | Panel", page_icon="📦", layout="wide")
 st.title("🚀 Esnaf101 Sipariş Yönetim Paneli")
 
-# Sizin asıl Google Sheets tablonuzun temiz ve net bağlantı linki
-SURUCU_LINKI = "https://google.com"
+# Sizin ilettiğiniz tam, eksiksiz ve doğrudan sekmeyi hedefleyen link:
+SURUCU_LINKI = "https://docs.google.com/spreadsheets/d/1QSi5Rnc8Jdx3Ew6_nmzB48igwsXus_wapCtz5BN-cjQ/edit?resourcekey=&gid=1045669118#gid=1045669118"
 
 # Google Sheets Canlı Bağlantısı
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def verileri_yukle(worksheet_adi):
-    # Linki doğrudan fonksiyonun içine gömerek Secrets bağımlılığını bitiriyoruz
+    # Tam linki ve sekme adını doğrudan fonksiyona veriyoruz
     return conn.read(spreadsheet=SURUCU_LINKI, worksheet=worksheet_adi, ttl="0d")
 
 try:
@@ -94,7 +94,7 @@ if arama_tel:
                     gercek_kargo_kodu = f"YK-{datetime.now().strftime('%M%S')}-{str(arama_tel)[-4:]}"
                     
                     # Satır indexini bul ve güncelle
-                    idx = df_musteri[df_musteri["Telefon Numaranız"].astype(str).str.contains(arama_tel)].index[0]
+                    idx = df_musteri[df_musteri["Telefon Numaranız"].astype(str).str.contains(arama_tel)].index
                     df_musteri.at[idx, "Durum"] = "Kargolandı & Faturalandı"
                     df_musteri.at[idx, "Kargo Kodu"] = gercek_kargo_kodu
                     df_musteri.at[idx, "Satılan Ürünler"] = "\n".join([x["ürün"] for x in secilen_urunler])
