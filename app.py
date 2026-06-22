@@ -7,19 +7,23 @@ from datetime import datetime
 st.set_page_config(page_title="Esnaf101 | Panel", page_icon="📦", layout="wide")
 st.title("🚀 Esnaf101 Sipariş Yönetim Paneli")
 
+# Sizin asıl Google Sheets tablonuzun temiz ve net bağlantı linki
+SURUCU_LINKI = "https://google.com"
+
 # Google Sheets Canlı Bağlantısı
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def verileri_yukle(worksheet_adi):
-    return conn.read(worksheet=worksheet_adi, ttl="0d")
+    # Linki doğrudan fonksiyonun içine gömerek Secrets bağımlılığını bitiriyoruz
+    return conn.read(spreadsheet=SURUCU_LINKI, worksheet=worksheet_adi, ttl="0d")
 
 try:
     # Google Sheets'ten verileri canlı çekiyoruz
     df_musteri = verileri_yukle("Form Yanıtları 1")
-    # Tablonuzdaki sekme adı 'Ürün_Listesi' olduğu için burası güncellendi:
     df_urunler = verileri_yukle("Ürün_Listesi")
 except Exception as e:
-    st.error("Google Sheets bağlantısı kurulamadı. Lütfen Secrets ayarlarını ve tablonuzdaki sekme isimlerini kontrol edin!")
+    st.error(f"Bağlantı Hatası: {e}")
+    st.info("Lütfen tablonuzun altındaki sekme isimlerinin 'Form Yanıtları 1' ve 'Ürün_Listesi' olduğundan emin olun.")
     st.stop()
 
 # 🔄 ADIM 2: Telefon Numarası ile Arama
@@ -46,10 +50,9 @@ if arama_tel:
         
         st.divider()
         
-        # 🔄 ADIM 3: Ürün Ekleme (Fiyat Tanımlı Gelecek, Düzenlenebilecek)
+        # 🔄 ADIM 3: Ürün Ekleme
         st.subheader("🛒 2. Adım: Ürün ve Fiyat İşleme")
         
-        # Ürün Listesi boşsa varsayılan havuz oluştur
         if not df_urunler.empty and len(df_urunler) > 0:
             urun_havuzu = ["Seçiniz..."] + df_urunler.iloc[:, 0].dropna().tolist()
         else:
@@ -90,7 +93,7 @@ if arama_tel:
                 with st.spinner("Sistemler tetikleniyor..."):
                     gercek_kargo_kodu = f"YK-{datetime.now().strftime('%M%S')}-{str(arama_tel)[-4:]}"
                     
-                    # Hücre güncelleme
+                    # Satır indexini bul ve güncelle
                     idx = df_musteri[df_musteri["Telefon Numaranız"].astype(str).str.contains(arama_tel)].index[0]
                     df_musteri.at[idx, "Durum"] = "Kargolandı & Faturalandı"
                     df_musteri.at[idx, "Kargo Kodu"] = gercek_kargo_kodu
@@ -98,8 +101,7 @@ if arama_tel:
                     df_musteri.at[idx, "Ürün Fiyatları"] = "\n".join([str(x["fiyat"]) for x in secilen_urunler])
                     df_musteri.at[idx, "Toplam Tutar (TL)"] = toplam_fatura
                     
-                    # Güncel veriyi Google Sheets'e geri yaz
-                    conn.update(worksheet="Form Yanıtları 1", data=df_musteri)
+                    conn.update(spreadsheet=SURUCU_LINKI, worksheet="Form Yanıtları 1", data=df_musteri)
                     
                     st.success("🎉 İŞLEM BAŞARIYLA TAMAMLANDI!")
                     st.info(f"📦 **Yurtiçi Kargo Kodu:** {gercek_kargo_kodu}")
