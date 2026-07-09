@@ -1,5 +1,6 @@
 import { serverApiFetch } from "../../lib/server-api";
 import { assignPrice, markPaid } from "./actions";
+import { ProductAutocomplete } from "./ProductAutocomplete";
 
 interface Customer {
   fullName: string | null;
@@ -19,16 +20,10 @@ interface OrderRow {
   shipment: { trackingNumber: string | null } | null;
 }
 
-interface ProductRow {
-  id: string;
-  name: string;
-}
-
 export default async function OrdersPage() {
-  const [pending, awaitingPayment, products] = await Promise.all([
+  const [pending, awaitingPayment] = await Promise.all([
     serverApiFetch("/orders?status=awaiting_product_price") as Promise<OrderRow[]>,
     serverApiFetch("/orders?status=awaiting_payment") as Promise<OrderRow[]>,
-    serverApiFetch("/products") as Promise<ProductRow[]>,
   ]);
 
   return (
@@ -54,16 +49,7 @@ export default async function OrdersPage() {
               </div>
             </div>
             <form action={assignPrice.bind(null, order.id)} style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-              <select name="productId" required defaultValue="">
-                <option value="" disabled>
-                  Ürün seç
-                </option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <ProductAutocomplete name="productId" />
               <input name="price" type="number" step="0.01" placeholder="Fiyat" required />
               <button type="submit">Onayla</button>
             </form>
