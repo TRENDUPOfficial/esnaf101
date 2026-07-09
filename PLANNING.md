@@ -421,15 +421,12 @@ kullanmalı — ikisinin `.env`'inde de birebir aynı `APP_ENCRYPTION_KEY` var.
     `IYZICO_API_KEY`/`IYZICO_SECRET_KEY` eksikse direkt başarısız kaydedilir.
     **3 ardışık başarısız denemeden sonra hem abonelik hem tenant otomatik askıya
     alınır (dunning)** — bu mantık gerçek verilerle test edildi (bkz. aşağı).
-  - **Bilinçli kapsam daraltmaları (dürüstçe belirtiliyor)**:
-    1. **2FA yok.** PLANNING.md'de süper admin için "2FA zorunlu" yazıyordu; bu MVP
-       geçişinde uygulanmadı, sadece email+şifre var. İleride eklenmeli.
-    2. **iyzico gerçek imzalama yok.** `@esnaf101/integrations-billing`daki
-       `IyzicoBillingClient.storeCard`/`chargeSubscription` hâlâ (Adım 1'den beri)
-       "henüz implemente edilmedi" hatası fırlatıyor — gerçek HMAC imzalama sandbox
-       kimlik bilgisi olmadan anlamlı şekilde yazılıp doğrulanamaz. Dunning/job
-       planlama mekanizmasının tamamı gerçek ve test edildi; sadece "iyzico'ya gerçek
-       istek at" kısmı stub.
+  - **Kalan bilinçli kapsam daraltması**: **iyzico gerçek imzalama yok.**
+    `@esnaf101/integrations-billing`daki `IyzicoBillingClient.storeCard`/
+    `chargeSubscription` hâlâ (Adım 1'den beri) "henüz implemente edilmedi" hatası
+    fırlatıyor — gerçek HMAC imzalama sandbox kimlik bilgisi olmadan anlamlı şekilde
+    yazılıp doğrulanamaz. Dunning/job planlama mekanizmasının tamamı gerçek ve test
+    edildi; sadece "iyzico'ya gerçek istek at" kısmı stub.
 
 **Runtime'da gerçek verilerle doğrulanan kısımlar** (Clerk gerektiren tenant panel
 uçları için gerçek bir Clerk oturumu kurulamadığından — headless ortamda gerçek
@@ -455,7 +452,56 @@ doğrulanmıştı):
   (Clerk oturumu / admin cookie'si) doğru yönlendirme yaptı.
 
 **MVP'nin "Uçtan Uca Akış" bölümündeki 9 adımın tamamı artık mekanik olarak var.**
-Bundan sonraki doğal iş: kullanıcının belirttiği gibi düzenleme/ince ayar (ürün arama
-UX'i autocomplete'e çevirme, panel tasarımı, hata mesajlarının daha kullanıcı dostu
-gösterimi), gerçek sağlayıcı hesaplarının (Meta WABA, Paraşüt, Shipentegra, iyzico)
-bağlanıp sandbox'ta uçtan uca test edilmesi, ve süper admin için 2FA.
+Kullanıcı "sonra düzenleme yaparız, hızlıca tamamla" dedikten sonra "push et ve devam
+et, ben uyuyorum" diyerek gözetimsiz devam etmeyi onayladı — bu oturumda, önceki
+geçişte bilinçli olarak ertelenen/basitleştirilen parçalar tamamlandı, her adımdan
+sonra ayrı commit + push yapıldı:
+
+- **Ürün arama autocomplete** (`apps/web/app/orders/ProductAutocomplete.tsx`):
+  Adım 4'ün belirttiği "arama/otomatik tamamlama" — önceki geçişte zaman kısıtı
+  nedeniyle basit bir `<select>`e düşülmüştü. Artık personel ürün adı/SKU'ya göre
+  yazarken arıyor; stoksuz ürünler "stok yok" etiketiyle işaretleniyor. Backend
+  arama sorgusu (`ProductsService.list` — name/sku/barcode, case-insensitive) gerçek
+  verilerle doğrulandı.
+- **`.github/workflows/ci.yml`** (yeni): her push/PR'da pnpm install → Prisma
+  generate → migrasyonları temiz bir Postgres service container'a uygula → tüm
+  workspace'i derle. Migration zincirinin (4 migration) gerçekten sıfırdan bir
+  veritabanında baştan sona çalıştığı yerel olarak da doğrulandı. Lint henüz yok
+  (hiçbir pakette eslint config dosyası yok — ayrı bir iş).
+- **Dockerfile'lar** (`apps/{api,worker,web,superadmin}/Dockerfile`, kök `.dockerignore`):
+  PLANNING.md'nin hosting kararı (Railway/Render) için gerekliydi. Her biri repo
+  kökünden build edilmeli (`docker build -f apps/api/Dockerfile .`) çünkü pnpm
+  workspace bağımlılıkları yüzünden context tüm monorepo olmak zorunda. `apps/api`
+  ve `apps/worker` imajları gerçekten build edilip docker-compose'daki Postgres/
+  Redis'e karşı çalıştırılarak doğrulandı — bu sırada Alpine'in musl libc'sinde
+  Prisma engine binary'sinin ihtiyaç duyduğu OpenSSL'in eksik olduğu ortaya çıktı
+  (`libssl.so.1.1 not found`), `apk add openssl` ile düzeltildi (4 Dockerfile'ın
+  hepsine uygulandı). `apps/web`/`apps/superadmin` aynı deseni kullanıyor, ayrıca
+  imaj olarak build edilip çalıştırılmadı.
+- **Süper admin 2FA** (PLANNING.md'nin "2FA zorunlu" gereksinimi — önceki geçişte
+  bilinçli olarak atlanmıştı, artık tamamlandı): `PlatformAdmin`e `twoFactorSecret`/
+  `twoFactorEnabled` eklendi (migration). Harici bağımlılık olmadan (`node:crypto`
+  ile) standart RFC 6238 TOTP implementasyonu — `apps/api/src/platform-admin/auth/totp.ts`
+  (base32 encode/decode + HMAC-SHA1 HOTP, 30sn periyot, 6 hane, ±1 adım tolerans).
+  Giriş artık iki aşamalı: `POST /admin/auth/login` şifre doğruysa asla tam yetkili
+  token vermez — `twoFactorSecret` yoksa otomatik üretip `stage: "setup"` (sır +
+  `otpauth://` URI) döner, varsa `stage: "verify"` döner; her iki durumda da sadece
+  10 dakikalık bir `tempToken`. `POST /admin/auth/confirm-2fa` bu `tempToken` + 6
+  haneli kodu doğrulayıp (ilk seferse `twoFactorEnabled=true` yapıp) gerçek 12 saatlik
+  oturum JWT'sini veriyor. `apps/superadmin/app/login/`: `LoginFlow.tsx` (client
+  component, kimlik bilgisi → kurulum/doğrulama iki aşamasını yönetir; QR kod imajı
+  yok — sır elle girilecek şekilde metin olarak gösteriliyor) + Server Actions
+  (`requestLogin`, `confirmCode` — ikincisi cookie'yi set edip yönlendiriyor).
+  **Gerçek bir TOTP secret ile uçtan uca doğrulandı**: ilk giriş → `stage=setup` +
+  sır döndü → o sırdan elle hesaplanan 6 haneli kod ile yanlış kod reddedildi (401),
+  doğru kod kabul edildi ve `twoFactorEnabled=true` oldu → ikinci giriş artık
+  `stage=verify` döndü → yeni bir kod ile tekrar doğrulanıp alınan tam yetkili
+  token'ın gerçekten `/admin/tenants`e erişebildiği doğrulandı.
+
+**Kalan tek bilinçli kapsam daraltması: iyzico'nun gerçek HMAC imzalaması.** Sandbox
+kimlik bilgisi olmadan anlamlı şekilde yazılıp doğrulanamaz — dunning/job planlama
+mekanizmasının geri kalanı tamamen gerçek ve test edilmiş durumda.
+
+Bundan sonraki doğal iş: gerçek sağlayıcı hesaplarının (Meta WABA, Paraşüt,
+Shipentegra, iyzico) bağlanıp sandbox'ta uçtan uca test edilmesi, panel tasarımı/UX
+inceliği, ve iyzico'nun gerçek imzalama mantığının yazılması.
