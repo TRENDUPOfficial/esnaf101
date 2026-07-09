@@ -283,7 +283,80 @@ Docker Compose servisleri `docker compose up -d` ile ayağa kalkıyor (şu an
   kaynağı derlemeye dahil etmesi `rootDir` çıkarımını bozup `nest build`'in çıktısını
   sessizce yanlış dizine (`dist/apps/api/src/...`) yazmasına yol açıyordu.
 
-Bir sonraki oturum **3. adım ("WhatsApp webhook + konuşma botu")** ile devam etmeli:
-Meta webhook alıcı + imza doğrulama, `conversation_states`'e göre yönlendiren durum
-makinesi (telefon numarasından müşteri tanıma, ekran görüntüsü alma, yeni müşteri
-bilgi toplama, sipariş kaydı oluşturma).
+**3. adım ("WhatsApp webhook + konuşma botu") tamamlandı.** Bu oturumda kurulanlar:
+
+- **Mimari**: Platform tek bir Meta App üzerinden çalışıyor (Embedded Signup ile her
+  tenant kendi numarasını bağlar) — webhook URL'si tek, tenant gelen mesajdaki
+  `phone_number_id`den `tenant_integrations` tablosu üzerinden çözümleniyor.
+  `apps/api`deki webhook controller kasıtlı olarak ince: imzayı doğrulayıp tenant'ı
+  çözer ve gerçek işi `whatsapp-inbound` BullMQ kuyruğuna devredip hemen 200 döner.
+  Gerçek durum makinesi ve gönderim `apps/worker`da çalışıyor (`whatsapp-inbound` işlenir
+  → üretilen yanıt `whatsapp-send` kuyruğuna eklenir → oradan gerçekten gönderilir).
+- **`packages/integrations/whatsapp`**: `WhatsAppClient`e `getMediaUrl`/`downloadMedia`
+  eklendi (Meta Media API — iki adımlı: medya URL'si al, sonra o URL'den indir).
+  Webhook payload tipleri (`WhatsAppWebhookPayload`, `WhatsAppInboundMessage`) ve
+  `extractInboundEvents` ayrıştırma yardımcısı eklendi.
+- **`packages/integrations/storage`** (yeni paket): `ObjectStorage` arayüzü +
+  `S3ObjectStorage` (Cloudflare R2 için, S3 API uyumlu) + `LocalObjectStorage` (S3
+  kimlik bilgileri tanımlı değilken devreye giren yerel disk adaptörü — bu sayede
+  gerçek R2 hesabı olmadan da ekran görüntüsü yükleme akışı uçtan uca test edilebiliyor).
+  `createObjectStorageFromEnv()` hangisinin kullanılacağına `.env`e göre karar veriyor.
+  `apps/api`, `S3_ENDPOINT` tanımlı değilken `LOCAL_STORAGE_DIR`i `/uploads` altında
+  statik olarak servis ediyor.
+- **`apps/api`**: `POST /webhooks/whatsapp` (svix değil, Meta'nın kendi
+  `X-Hub-Signature-256` HMAC imzası — `WHATSAPP_APP_SECRET` ile doğrulanıyor) ve
+  `GET /webhooks/whatsapp` (Meta'nın abonelik doğrulama challenge'ı). Her ikisi de
+  `@Public()`. `QueueModule` (`bullmq` + `ioredis`) eklendi — `apps/api` artık
+  kuyruk producer'ı da (bkz. repo iskeleti yorumu).
+- **`apps/worker` — konuşma durum makinesi** (`whatsapp/conversation.service.ts`):
+  - Müşteri `(tenantId, waId)` ile tanınır/oluşturulur; `conversation_states`
+    tablosunda durum tutulur (`awaiting_screenshot` → `awaiting_name` →
+    `awaiting_address` → `done`).
+  - Ekran görüntüsü (image mesajı) geldiğinde: müşteri zaten tanınıyorsa (ad-soyad +
+    adres kayıtlıysa) direkt sipariş oluşturulur (durum: `awaiting_product_price`);
+    yeni müşteriyse ekran görüntüsü URL'si `conversation_states.context`e geçici
+    olarak yazılır ve ad-soyad sorulur.
+  - Ad-soyad ve adres metin mesajlarıyla toplanır; adres alınınca bekleyen ekran
+    görüntüsüyle birlikte sipariş kaydı oluşturulur (tek transaction).
+  - `whatsapp-send` kuyruğu artık gerçekten `WhatsAppClient.sendTextMessage`
+    çağırıyor (öncesinde sadece console.log placeholder'dı); tenant'ın
+    `tenant_integrations.whatsappAccessToken`ı varsa onu, yoksa platform genelindeki
+    `WHATSAPP_ACCESS_TOKEN`ı kullanıyor.
+- **Runtime'da uçtan uca doğrulandı** (gerçek bir test tenant + `tenant_integrations`
+  satırı seed edilip, Meta'nın gerçek webhook payload formatına uygun, placeholder
+  `WHATSAPP_APP_SECRET` ile imzalanmış istekler gönderilerek):
+  - `GET` doğrulama challenge'ı doğru/yanlış token ile 200/403.
+  - Geçersiz imza → 400; bilinmeyen `phone_number_id` → sessizce atlanıyor (200).
+  - İlk metin mesajı → müşteri + `conversation_state` oluşturuluyor
+    (`awaiting_screenshot`), doğru "ekran görüntüsü gönderin" yanıtı `whatsapp-send`
+    kuyruğuna ekleniyor.
+  - `awaiting_name` → ad-soyad kaydediliyor, `awaiting_address`e geçiyor.
+  - `awaiting_address` → adres kaydediliyor + sipariş (`awaiting_product_price`,
+    doğru `screenshotUrl`/`rawDescription`) tek transaction'da oluşuyor, durum `done`a
+    dönüyor.
+  - `whatsapp-send` worker'ı doğru tenant/phoneNumberId'yi çözüp gerçek Meta API'sini
+    çağırmaya çalışıyor ve **beklendiği gibi** `WHATSAPP_ACCESS_TOKEN tanımlı değil`
+    hatasıyla başarısız oluyor (gerçek erişim token'ı olmadığı için) — worker
+    process'i çökmüyor, job düzgün `failed` durumuna geçiyor.
+  - **Gerçek Meta kimlik bilgileri olmadan test edilemeyen tek kısım**: medya indirme
+    (`WhatsAppClient.downloadMedia`) ve gerçek mesaj gönderimi — bunlar gerçek
+    `WHATSAPP_ACCESS_TOKEN` + gerçek bir WABA/telefon numarası gerektiriyor. Sahte bir
+    `media.id` ile gönderilen image mesajının, beklendiği gibi (worker çökmeden)
+    `failed` job olarak sonuçlandığı doğrulandı.
+- **`.devcontainer/devcontainer.json`** (yeni dosya — önceden yoktu, Codespace
+  varsayılan image ile çalışıyordu): `apps/api`nin 3001 portu için `forwardPorts` +
+  `portsAttributes` (`visibility: public`) eklendi. Bu değişiklik **mevcut çalışan
+  Codespace'e değil, bir sonraki rebuild/yeni Codespace'e** yansıyacak.
+- **`.env` dosyaları** (gitignore'lu, gerçek değerlerle): `apps/api/.env` ve
+  `apps/worker/.env` artık gerçek Clerk anahtarları + placeholder WhatsApp
+  değerleriyle (`dev_placeholder_app_secret`/`dev_placeholder_verify_token`) dolu.
+  Gerçek bir Meta WABA bağlanınca bu üçü Meta Dashboard'daki gerçek değerlerle
+  değiştirilmeli: `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`,
+  `WHATSAPP_ACCESS_TOKEN` (+ ilgili tenant'ın `tenant_integrations.whatsapp_phone_number_id`'si
+  panelden/DB'den girilmeli — bu adımın kendisi henüz kurulmadı, bkz. Adım 7).
+
+Bir sonraki oturum **4. adım ("Ürün master data + personel fiyat girişi")** ile devam
+etmeli: tenant'ın ürünlerini yönetebileceği bir ürün tanımlama ekranı (`apps/web`) ve
+bekleyen siparişler listesi — personelin ekran görüntüsüne bakıp ürünü arayıp/ekleyip
+fiyat girerek siparişi onayladığı ekran (durum: `awaiting_product_price` →
+sonraki adımda `invoiced`e geçecek).

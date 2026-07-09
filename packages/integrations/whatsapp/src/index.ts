@@ -43,6 +43,111 @@ export class WhatsAppClient {
       throw new Error(`WhatsApp mesaj gönderimi başarısız: ${res.status} ${await res.text()}`);
     }
   }
+
+  /**
+   * Meta Media API'den bir medyanın (ör. ekran görüntüsü) geçici indirme
+   * URL'sini alır. Dönen URL birkaç dakika içinde geçersiz olur; hemen
+   * ardından `downloadMedia` ile indirilmelidir.
+   */
+  async getMediaUrl(mediaId: string): Promise<{ url: string; mimeType: string }> {
+    const graphRoot = this.baseUrl.slice(0, this.baseUrl.lastIndexOf("/"));
+    const res = await fetch(`${graphRoot}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${this.config.accessToken}` },
+    });
+    if (!res.ok) {
+      throw new Error(`WhatsApp medya URL'si alınamadı: ${res.status} ${await res.text()}`);
+    }
+    const data = (await res.json()) as { url: string; mime_type: string };
+    return { url: data.url, mimeType: data.mime_type };
+  }
+
+  /**
+   * Bir medyayı (ör. müşterinin gönderdiği ekran görüntüsü) baytlar olarak
+   * indirir. `getMediaUrl` + asıl indirme isteğini tek adımda birleştirir.
+   */
+  async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const { url, mimeType } = await this.getMediaUrl(mediaId);
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${this.config.accessToken}` },
+    });
+    if (!res.ok) {
+      throw new Error(`WhatsApp medya indirilemedi: ${res.status} ${await res.text()}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { buffer, mimeType };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gelen webhook payload tipleri ve ayrıştırma yardımcıları
+// ---------------------------------------------------------------------------
+
+export interface WhatsAppInboundTextMessage {
+  type: "text";
+  id: string;
+  from: string;
+  timestamp: string;
+  text: { body: string };
+}
+
+export interface WhatsAppInboundImageMessage {
+  type: "image";
+  id: string;
+  from: string;
+  timestamp: string;
+  image: { id: string; mime_type: string; caption?: string };
+}
+
+export type WhatsAppInboundMessage =
+  | WhatsAppInboundTextMessage
+  | WhatsAppInboundImageMessage
+  | { type: string; id: string; from: string; timestamp: string };
+
+export interface WhatsAppWebhookPayload {
+  object: string;
+  entry: Array<{
+    id: string;
+    changes: Array<{
+      field: string;
+      value: {
+        metadata: { phone_number_id: string; display_phone_number: string };
+        contacts?: Array<{ profile: { name: string }; wa_id: string }>;
+        messages?: WhatsAppInboundMessage[];
+      };
+    }>;
+  }>;
+}
+
+export interface ParsedInboundEvent {
+  phoneNumberId: string;
+  waId: string;
+  contactName?: string;
+  message: WhatsAppInboundMessage;
+}
+
+/**
+ * Meta webhook payload'ını, her biri tek bir gelen mesajı temsil eden düz
+ * bir listeye çevirir (bir payload birden fazla entry/change/message
+ * içerebilir).
+ */
+export function extractInboundEvents(payload: WhatsAppWebhookPayload): ParsedInboundEvent[] {
+  const events: ParsedInboundEvent[] = [];
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      if (change.field !== "messages") continue;
+      const { metadata, contacts, messages } = change.value;
+      for (const message of messages ?? []) {
+        const contact = contacts?.find((c) => c.wa_id === message.from);
+        events.push({
+          phoneNumberId: metadata.phone_number_id,
+          waId: message.from,
+          contactName: contact?.profile.name,
+          message,
+        });
+      }
+    }
+  }
+  return events;
 }
 
 /**
