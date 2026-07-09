@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { ClerkProvider } from "@clerk/nextjs";
+import { trTR } from "@clerk/localizations";
 
 export const metadata = {
   title: "Esnaf101 — Satıcı Paneli",
@@ -6,8 +8,10 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="tr">
-      <body>{children}</body>
-    </html>
+    <ClerkProvider localization={trTR}>
+      <html lang="tr">
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
   );
 }

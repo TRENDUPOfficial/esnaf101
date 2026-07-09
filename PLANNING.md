@@ -238,7 +238,52 @@ Tüm workspace `pnpm install` ile kuruluyor, `pnpm -r build` ile deriliyor;
 Docker Compose servisleri `docker compose up -d` ile ayağa kalkıyor (şu an
 `docker compose stop` ile durduruldu, veriler volume'lerde duruyor).
 
-Bir sonraki oturum **2. adım ("Tenant & auth")** ile devam etmeli: tenant kayıt/
-onboarding akışı (stok takibi aç/kapa + IBAN bilgisi bu adımda toplanacak),
-Clerk entegrasyonu, tenant bazlı yetkilendirme middleware'i (NestJS guard +
-Next.js middleware). Ardından 3. adımdaki WhatsApp webhook/konuşma botuna geçilecek.
+**2. adım ("Tenant & auth") tamamlandı.** Bu oturumda kurulanlar:
+
+- **Prisma şeması**: `Tenant`e `clerkOrgId` (unique) ve `status` (`pending_onboarding` |
+  `active` | `suspended`) eklendi — tenant kimliği Clerk Organization ile eşleşiyor.
+  Migration: `migrations/20260710000000_tenant_clerk_org` (gerçek Postgres'e uygulanıp
+  doğrulandı).
+- **apps/api — Clerk entegrasyonu + tenant bazlı yetkilendirme middleware'i**:
+  - `ClerkAuthGuard` (global, `APP_GUARD`): her istekte Clerk oturum JWT'sini
+    `@clerk/backend`'in `verifyToken`'ı ile doğrular, aktif Clerk organizasyonundan
+    (`org_id`) tenant'ı çözümleyip request'e ekler, askıya alınmış tenant'ları reddeder.
+    `@Public()` (health check, webhook) ve `@SkipTenant()` (org henüz yokken) decorator'ları
+    ile route bazlı muafiyet var. `@CurrentTenant()` param decorator'ı ile controller'lara
+    enjekte ediliyor.
+  - `POST /webhooks/clerk`: svix imza doğrulaması + `organization.created` olayında
+    Tenant satırı oluşturma (`status: pending_onboarding`).
+  - `GET /tenants/me`, `PATCH /tenants/me/onboarding`: onboarding'in son adımı — stok
+    takibi aç/kapa + IBAN + hesap sahibi bilgisini `TenantSettings`'e yazıp tenant'ı
+    `active`e alıyor.
+  - Runtime'da doğrulandı: `/health` herkese açık (200), `/tenants/me` auth'suz 401,
+    geçersiz token 401, `/webhooks/clerk` eksik svix header'ında 400.
+- **apps/web — onboarding akışı**: `@clerk/nextjs` ile `ClerkProvider` + `middleware.ts`
+  (`clerkMiddleware` — oturum zorunlu, aktif organizasyon yoksa `/onboarding/organization`a
+  yönlendirir). Sayfalar: `/sign-in`, `/sign-up` (Clerk hosted bileşenleri),
+  `/onboarding/organization` (`<CreateOrganization />` — Clerk organizasyonu = tenant),
+  `/onboarding/settings` (stok takibi + IBAN formu, `PATCH /tenants/me/onboarding`'e
+  gönderiyor). Ana sayfa `GET /tenants/me`'den tenant durumunu okuyup `pending_onboarding`
+  ise ayarlar adımına yönlendiriyor.
+  - **Not**: `@clerk/nextjs` en güncel majör sürümü (v7) Next.js 15+ gerektirdiği için
+    hem `apps/web` hem `apps/superadmin` Next.js 14→15 ve React 18→19'a yükseltildi
+    (superadmin henüz Clerk kullanmıyor ama tek React sürümü tutmak için birlikte
+    yükseltildi).
+  - **Gerçek Clerk hesabı olmadan test edilemeyen kısım**: middleware sahte
+    (placeholder) publishable key ile doğru şekilde Clerk'in hosted auth akışına
+    yönlendirdiği doğrulandı, ama gerçek oturum açma/organizasyon oluşturma akışı
+    ancak `.env`'e gerçek `CLERK_SECRET_KEY` / `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` /
+    `CLERK_WEBHOOK_SIGNING_SECRET` girilip Clerk Dashboard'da webhook endpoint'i
+    (`/webhooks/clerk`, `organization.created` olayına abone) tanımlanınca uçtan uca
+    test edilebilir.
+- **Build altyapısı düzeltmesi**: `packages/db` ve tüm `packages/integrations/*` artık
+  `tsc` ile `dist/`e derleniyor ve `package.json`'da `main`/`types` `dist/`i gösteriyor
+  (öncesinde ham `.ts` kaynağını işaret ediyorlardı). Bunun nedeni: `apps/api` bu
+  paketleri gerçekten import etmeye başlayınca (`@esnaf101/db`), TypeScript'in ham
+  kaynağı derlemeye dahil etmesi `rootDir` çıkarımını bozup `nest build`'in çıktısını
+  sessizce yanlış dizine (`dist/apps/api/src/...`) yazmasına yol açıyordu.
+
+Bir sonraki oturum **3. adım ("WhatsApp webhook + konuşma botu")** ile devam etmeli:
+Meta webhook alıcı + imza doğrulama, `conversation_states`'e göre yönlendiren durum
+makinesi (telefon numarasından müşteri tanıma, ekran görüntüsü alma, yeni müşteri
+bilgi toplama, sipariş kaydı oluşturma).
