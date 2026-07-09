@@ -13,5 +13,6 @@ export async function apiFetch(path: string, token: string | null, init?: Reques
     const body = await res.text();
     throw new Error(`API isteği başarısız (${res.status}): ${body}`);
   }
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }

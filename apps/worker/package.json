@@ -14,6 +14,7 @@
     "@esnaf101/integrations-shipping": "workspace:*",
     "@esnaf101/integrations-billing": "workspace:*",
     "@esnaf101/integrations-storage": "workspace:*",
+    "@esnaf101/crypto": "workspace:*",
     "bullmq": "^5.12.12",
     "dotenv": "^16.4.5",
     "ioredis": "5.10.1"

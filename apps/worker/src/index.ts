@@ -1,26 +1,21 @@
 import "dotenv/config";
 import { Queue, Worker } from "bullmq";
-import IORedis from "ioredis";
+import { connection, sendQueue } from "./queue-client";
 import { QUEUE_NAMES } from "./queues";
 import { processInboundMessage } from "./whatsapp/conversation.service";
 import type { WhatsAppInboundJobData } from "./whatsapp/conversation.service";
 import { sendWhatsAppMessage } from "./whatsapp/send.service";
 import type { WhatsAppSendJobData } from "./whatsapp/send.service";
-
-const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-  maxRetriesPerRequest: null,
-});
-
-const sendQueue = new Queue(QUEUE_NAMES.whatsappSend, { connection });
-
-// Fatura kesme (Adım 5) ve kargo etiketi oluşturma (Adım 6) işleyicileri
-// ilerleyen adımlarda buraya eklenecek.
+import { processInvoiceCreate } from "./invoicing/invoice.service";
+import type { InvoiceCreateJobData } from "./invoicing/invoice.service";
+import { processShipmentCreate } from "./shipping/shipment.service";
+import type { ShipmentCreateJobData } from "./shipping/shipment.service";
+import { processSubscriptionBilling } from "./billing/subscription-billing.service";
 
 const invoiceWorker = new Worker(
   QUEUE_NAMES.invoiceCreate,
   async (job) => {
-    // eslint-disable-next-line no-console
-    console.log(`[${QUEUE_NAMES.invoiceCreate}] job ${job.id} alındı`, job.data);
+    await processInvoiceCreate(job.data as InvoiceCreateJobData);
   },
   { connection },
 );
@@ -28,8 +23,7 @@ const invoiceWorker = new Worker(
 const shipmentWorker = new Worker(
   QUEUE_NAMES.shipmentCreate,
   async (job) => {
-    // eslint-disable-next-line no-console
-    console.log(`[${QUEUE_NAMES.shipmentCreate}] job ${job.id} alındı`, job.data);
+    await processShipmentCreate(job.data as ShipmentCreateJobData);
   },
   { connection },
 );
@@ -54,6 +48,24 @@ const whatsappInboundWorker = new Worker(
   { connection },
 );
 
+const subscriptionBillingQueue = new Queue(QUEUE_NAMES.subscriptionBilling, { connection });
+const subscriptionBillingWorker = new Worker(
+  QUEUE_NAMES.subscriptionBilling,
+  async () => {
+    await processSubscriptionBilling();
+  },
+  { connection },
+);
+
+// Her gün 03:00'te süresi dolan abonelikler için otomatik tahsilat dener
+// (bkz. PLANNING.md Adım 9). Aynı repeatable job'ın birden fazla worker
+// kopyasında tekrar tekrar eklenmemesi için BullMQ'nun job id'si sabit.
+void subscriptionBillingQueue.add(
+  "daily-check",
+  {},
+  { repeat: { pattern: "0 3 * * *" }, jobId: "subscription-billing-daily" },
+);
+
 // eslint-disable-next-line no-console
 console.log("esnaf101 worker başlatıldı");
 
@@ -63,6 +75,8 @@ process.on("SIGTERM", async () => {
     shipmentWorker.close(),
     whatsappSendWorker.close(),
     whatsappInboundWorker.close(),
+    subscriptionBillingWorker.close(),
+    subscriptionBillingQueue.close(),
     sendQueue.close(),
   ]);
   process.exit(0);

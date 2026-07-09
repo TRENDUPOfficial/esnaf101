@@ -119,11 +119,16 @@ model TenantIntegration {
   tenantId               String                 @unique @map("tenant_id")
   tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   whatsappPhoneNumberId  String?                @map("whatsapp_phone_number_id")
+  /// AES-256-GCM ile şifrelenmiş (bkz. @esnaf101/crypto)
   whatsappAccessToken    String?                @map("whatsapp_access_token")
   invoiceProvider        InvoiceProviderType?   @map("invoice_provider")
-  invoiceApiKey          String?                @map("invoice_api_key")
+  /// Sağlayıcıya özel alanları (ör. Parasut: clientId/clientSecret/companyId/
+  /// accessToken) içeren, tamamı AES-256-GCM ile şifrelenmiş JSON blob.
+  invoiceCredentials     String?                @map("invoice_credentials")
   shippingProvider       ShippingProviderType?  @map("shipping_provider")
-  shippingApiKey         String?                @map("shipping_api_key")
+  /// Sağlayıcıya özel alanları (ör. Shipentegra: apiKey/apiSecret) içeren,
+  /// tamamı AES-256-GCM ile şifrelenmiş JSON blob.
+  shippingCredentials    String?                @map("shipping_credentials")
   createdAt              DateTime               @default(now()) @map("created_at")
   updatedAt              DateTime               @updatedAt @map("updated_at")
 
@@ -188,6 +193,7 @@ model Product {
 enum OrderStatus {
   new
   awaiting_product_price
+  awaiting_invoice
   invoiced
   awaiting_payment
   paid
@@ -195,19 +201,23 @@ enum OrderStatus {
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  tenantId        String      @map("tenant_id")
-  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerId      String      @map("customer_id")
-  customer        Customer    @relation(fields: [customerId], references: [id])
-  productId       String?     @map("product_id")
-  product         Product?    @relation(fields: [productId], references: [id])
-  screenshotUrl   String?     @map("screenshot_url")
-  rawDescription  String?     @map("raw_description")
-  price           Decimal?    @db.Decimal(10, 2)
-  status          OrderStatus @default(new)
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id               String      @id @default(cuid())
+  tenantId         String      @map("tenant_id")
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId       String      @map("customer_id")
+  customer         Customer    @relation(fields: [customerId], references: [id])
+  productId        String?     @map("product_id")
+  product          Product?    @relation(fields: [productId], references: [id])
+  screenshotUrl    String?     @map("screenshot_url")
+  rawDescription   String?     @map("raw_description")
+  price            Decimal?    @db.Decimal(10, 2)
+  status           OrderStatus @default(new)
+  /// Fatura/kargo worker'ında son başarısız denemenin hata mesajı (panelde
+  /// gösterilir) — başarılı işlemde temizlenir.
+  lastErrorMessage String?     @map("last_error_message")
+  paidAt           DateTime?   @map("paid_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
   invoice  Invoice?
   shipment Shipment?

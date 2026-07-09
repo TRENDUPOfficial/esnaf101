@@ -41,3 +41,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# derlenmiş çıktılar bazen (kaynağı belirlenemeyen bir tsc/pnpm etkileşimi
+# yüzünden) dist/ yerine src/ içine düşüyor — bu repoda src/ altında hiçbir
+# zaman .js/.d.ts elle commitlenmemeli.
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts

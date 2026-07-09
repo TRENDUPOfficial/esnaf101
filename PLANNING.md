@@ -355,8 +355,107 @@ Docker Compose servisleri `docker compose up -d` ile ayağa kalkıyor (şu an
   `WHATSAPP_ACCESS_TOKEN` (+ ilgili tenant'ın `tenant_integrations.whatsapp_phone_number_id`'si
   panelden/DB'den girilmeli — bu adımın kendisi henüz kurulmadı, bkz. Adım 7).
 
-Bir sonraki oturum **4. adım ("Ürün master data + personel fiyat girişi")** ile devam
-etmeli: tenant'ın ürünlerini yönetebileceği bir ürün tanımlama ekranı (`apps/web`) ve
-bekleyen siparişler listesi — personelin ekran görüntüsüne bakıp ürünü arayıp/ekleyip
-fiyat girerek siparişi onayladığı ekran (durum: `awaiting_product_price` →
-sonraki adımda `invoiced`e geçecek).
+**4-9. adımların tamamı ("MVP Uçtan Uca Akış"ın geri kalanı) tek oturumda tamamlandı.**
+Kullanıcı "hızlıca tamamla, sonra düzenleme yaparız" dediği için bu geçiş hız öncelikli
+yapıldı — mekanik olarak eksiksiz ama üçüncü parti API'lerin gerçek doğrulaması
+(Parasut/Shipentegra/iyzico) sandbox kimlik bilgisi olmadığı için yapılamadı.
+
+**Prisma şeması**: `OrderStatus`e `awaiting_invoice` eklendi (fiyat onaylandıktan sonra,
+fatura kesilene kadarki ara durum). `Order`e `lastErrorMessage` (worker hatalarının
+panelde gösterilmesi için) ve `paidAt` (raporlama için) eklendi. `TenantIntegration`de
+`invoiceApiKey`/`shippingApiKey` düz metin alanları kaldırılıp yerine
+`invoiceCredentials`/`shippingCredentials` (sağlayıcıya özel çoklu alanı JSON olarak
+tutan, tamamı şifrelenmiş string alanlar) kondu. Migration:
+`migrations/20260710010000_order_lifecycle_and_encrypted_creds`.
+
+**Yeni paket — `packages/crypto`**: `encryptSecret`/`decryptSecret`/`encryptJson`/
+`decryptJson` (AES-256-GCM, `APP_ENCRYPTION_KEY` env'inden türetilen anahtar).
+`apps/api` (yazarken şifreler) ve `apps/worker` (kullanırken çözer) aynı anahtarı
+kullanmalı — ikisinin `.env`'inde de birebir aynı `APP_ENCRYPTION_KEY` var.
+
+- **Adım 4 (Ürün + fiyat girişi)**: `apps/api`ye `ProductsModule` (CRUD, SKU'ya göre
+  arama) ve `OrdersModule` (`GET /orders?status=`, `PATCH /orders/:id/assign-price`)
+  eklendi. `assign-price`: ürünü/fiyatı sipariş üzerine yazar, stok takibi açıksa ve
+  ürün stokta yoksa reddeder, kapanınca stoktan 1 düşer, sipariş durumunu
+  `awaiting_invoice`e çeker ve `invoice-create` kuyruğuna iş ekler. `apps/web`e
+  `/products` (liste + ekleme formu) ve `/orders` (fiyat bekleyen siparişler — ekran
+  görüntüsü + ürün seçimi + fiyat girişi formu) eklendi.
+- **Adım 5 (Fatura + ödeme talimatı)**: `apps/worker/src/invoicing/invoice.service.ts`
+  — `awaiting_invoice` durumundaki siparişler için tenant'ın seçtiği sağlayıcıyı
+  (`ParasutInvoiceProvider`, kimlik bilgileri `@esnaf101/crypto` ile çözülerek) çağırır,
+  `Invoice` satırı oluşturur, sipariş durumunu `invoiced`e çeker, IBAN/ödeme talimatı
+  mesajını `whatsapp-send` kuyruğuna ekler ve durumu `awaiting_payment`e taşır. Her iki
+  aşama da idempotent (BullMQ retry güvenli). `PATCH /orders/:id/mark-paid` — personel
+  ödemeyi işaretler, sipariş `paid`e kilitlenir (`paidAt` yazılır) ve `shipment-create`
+  kuyruğuna iş eklenir. `apps/web` `/orders` sayfasında "ödeme bekliyor" bölümü ve
+  "Ödendi olarak işaretle" butonu var.
+- **Adım 6 (Kargo)**: `apps/worker/src/shipping/shipment.service.ts` — `paid`
+  siparişler için `ShipentegraShippingProvider`i çağırır, `Shipment` satırı oluşturur,
+  sipariş durumunu `shipped`e çeker, takip numarasını WhatsApp'tan bildirir. Hata
+  durumunda `lastErrorMessage` yazılır, sipariş `paid`de kalır (yanlışlıkla `shipped`
+  işaretlenmez).
+- **Adım 7 (Panel tamamlama)**: `apps/api`ye `IntegrationsModule`
+  (`GET/PATCH /integrations/me` — WhatsApp/Paraşüt/Shipentegra kimlik bilgilerini
+  şifreleyerek yazar, okurken sadece "tanımlı mı" boole'u döner, ham şifreli değer asla
+  response'a girmez) ve `CustomersModule` (`GET /customers`, arama) eklendi. `apps/web`e
+  `/integrations` (üç ayrı form) ve `/customers` (liste) eklendi.
+- **Adım 8 (Raporlama)**: `apps/api`ye `ReportsModule` (`GET /reports/summary` — bu ay
+  ciro, sipariş sayısı, en çok satan 5 ürün, düşük stoklu (≤5) ürünler) eklendi.
+  `apps/web`e `/dashboard` eklendi; ana sayfaya tüm yeni ekranlara giden nav eklendi.
+- **Adım 9 (Süper admin + abonelik faturalama)**: `apps/api`ye tenant panelinden
+  (Clerk) **tamamen ayrı** bir kimlik doğrulama katmanı eklendi —
+  `platform_admins` tablosuna karşı email+şifre (bcrypt) ile giriş, oturum
+  `PLATFORM_ADMIN_JWT_SECRET` ile imzalanan bir JWT (`PlatformAdminAuthGuard`,
+  global `ClerkAuthGuard`dan `@Public()` ile muaf). Uçlar: `POST /admin/auth/login`,
+  `GET /admin/tenants`, `GET /admin/tenants/:id`, `PATCH /admin/tenants/:id/status`,
+  `POST /admin/tenants/:id/subscription`, `GET/POST /admin/subscription-plans`,
+  `GET /admin/revenue-summary`. `apps/superadmin`: `/login` (Server Action ile
+  `apps/api`den token alıp httpOnly cookie'ye yazıyor), `middleware.ts` (cookie yoksa
+  `/login`e yönlendirir — gerçek doğrulama her istekte API tarafında), `/tenants`
+  (liste + askıya al/aktifleştir), `/tenants/[id]` (detay + abonelik atama +
+  tahsilat geçmişi), `/subscription-plans` (liste + oluşturma), ana sayfa (MRR/aktif/
+  askıda özet).
+  - **`apps/worker/src/billing/subscription-billing.service.ts`**: her gün 03:00'te
+    (BullMQ repeatable job, `jobId` sabit — tekrar eklenmez) süresi dolan aktif
+    abonelikler için iyzico'dan tahsilat dener. Kart tanımlı değilse veya
+    `IYZICO_API_KEY`/`IYZICO_SECRET_KEY` eksikse direkt başarısız kaydedilir.
+    **3 ardışık başarısız denemeden sonra hem abonelik hem tenant otomatik askıya
+    alınır (dunning)** — bu mantık gerçek verilerle test edildi (bkz. aşağı).
+  - **Bilinçli kapsam daraltmaları (dürüstçe belirtiliyor)**:
+    1. **2FA yok.** PLANNING.md'de süper admin için "2FA zorunlu" yazıyordu; bu MVP
+       geçişinde uygulanmadı, sadece email+şifre var. İleride eklenmeli.
+    2. **iyzico gerçek imzalama yok.** `@esnaf101/integrations-billing`daki
+       `IyzicoBillingClient.storeCard`/`chargeSubscription` hâlâ (Adım 1'den beri)
+       "henüz implemente edilmedi" hatası fırlatıyor — gerçek HMAC imzalama sandbox
+       kimlik bilgisi olmadan anlamlı şekilde yazılıp doğrulanamaz. Dunning/job
+       planlama mekanizmasının tamamı gerçek ve test edildi; sadece "iyzico'ya gerçek
+       istek at" kısmı stub.
+
+**Runtime'da gerçek verilerle doğrulanan kısımlar** (Clerk gerektiren tenant panel
+uçları için gerçek bir Clerk oturumu kurulamadığından — headless ortamda gerçek
+sign-in yapılamıyor — HTTP katmanı yerine derlenmiş servis sınıfları doğrudan
+gerçek Postgres/Redis'e karşı çalıştırıldı; auth/guard katmanı zaten Adım 2'de ayrıca
+doğrulanmıştı):
+- Ürün oluşturma/listeleme, entegrasyon kimlik bilgilerinin şifrelenip
+  "tanımlı" olarak raporlanması (ham değer asla dönmüyor).
+- `assign-price`: stok 10 → 9 (doğru düşüş), sipariş durumu `awaiting_invoice`e geçti.
+- Fatura worker'ı gerçek (sahte kimlik bilgili) bir Paraşüt API çağrısı yaptı, gerçek
+  `401 Unauthorized` aldı, `lastErrorMessage`e yazdı, sipariş durumunu bozmadı.
+- `mark-paid`: sipariş `paid`e geçti, `paidAt` yazıldı, kargo kuyruğuna iş eklendi;
+  kargo worker'ı gerçek bir Shipentegra çağrısı denedi, ağ hatası aldı, düzgün
+  başarısız oldu (sipariş yanlışlıkla `shipped` olmadı).
+- Raporlama: ciro/sipariş sayısı/en çok satan ürün gerçek verilerle doğru hesaplandı.
+- Süper admin: **gerçek HTTP** üzerinden — yanlış şifreyle 401, doğru şifreyle JWT,
+  token'sız `/admin/tenants`e 401, token'lı istekle tenant/plan/abonelik
+  oluşturma/listeleme/askıya alma çalıştı, gelir özeti (MRR) doğru hesaplandı.
+- Dunning: bir aboneliğin `active_until` tarihini geçmişe çekip billing worker'ını
+  3 kez elle tetikleyerek, 3. denemede hem `subscription.status` hem `tenant.status`in
+  otomatik `suspended`e geçtiği doğrulandı.
+- `apps/web` ve `apps/superadmin` dev sunucuları hatasız ayağa kalktı, middleware'ler
+  (Clerk oturumu / admin cookie'si) doğru yönlendirme yaptı.
+
+**MVP'nin "Uçtan Uca Akış" bölümündeki 9 adımın tamamı artık mekanik olarak var.**
+Bundan sonraki doğal iş: kullanıcının belirttiği gibi düzenleme/ince ayar (ürün arama
+UX'i autocomplete'e çevirme, panel tasarımı, hata mesajlarının daha kullanıcı dostu
+gösterimi), gerçek sağlayıcı hesaplarının (Meta WABA, Paraşüt, Shipentegra, iyzico)
+bağlanıp sandbox'ta uçtan uca test edilmesi, ve süper admin için 2FA.

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { apiFetch } from "../lib/api";
@@ -10,7 +11,7 @@ interface TenantMeResponse {
 export default async function HomePage() {
   const { getToken } = await auth();
   const token = await getToken();
-  const { tenant } = await apiFetch("/tenants/me", token) as TenantMeResponse;
+  const { tenant } = (await apiFetch("/tenants/me", token)) as TenantMeResponse;
 
   if (tenant.status === "pending_onboarding") {
     redirect("/onboarding/settings");
@@ -22,7 +23,13 @@ export default async function HomePage() {
       <p>
         {tenant.name} — durum: {tenant.status}
       </p>
-      <p>Sipariş, müşteri ve entegrasyon ekranları ilerleyen adımlarda eklenecek.</p>
+      <nav style={{ display: "flex", gap: "1rem", marginTop: "1.5rem" }}>
+        <Link href="/dashboard">Panel</Link>
+        <Link href="/orders">Siparişler</Link>
+        <Link href="/products">Ürünler</Link>
+        <Link href="/customers">Müşteriler</Link>
+        <Link href="/integrations">Entegrasyonlar</Link>
+      </nav>
     </main>
   );
 }
