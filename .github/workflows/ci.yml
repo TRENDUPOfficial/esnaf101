@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: esnaf101
+          POSTGRES_PASSWORD: esnaf101
+          POSTGRES_DB: esnaf101
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U esnaf101"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: "postgresql://esnaf101:esnaf101@localhost:5432/esnaf101?schema=public"
+      # Sadece `next build`in derlenmesi için gerekli — gerçek bir Clerk
+      # hesabına bağlı değil, yalnızca doğru formatta olmaları yeterli.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_Y2ktcGxhY2Vob2xkZXIuY2xlcmsuYWNjb3VudHMuZGV2JA"
+      CLERK_SECRET_KEY: "sk_test_ci_placeholder_not_a_real_key"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @esnaf101/db exec prisma generate
+
+      - name: Apply migrations to a clean database
+        run: pnpm --filter @esnaf101/db exec prisma migrate deploy
+
+      - name: Build all packages and apps
+        run: pnpm -r build
