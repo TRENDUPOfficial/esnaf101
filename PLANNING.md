@@ -212,6 +212,33 @@ docker-compose.yml
 
 ## Sonraki Adım
 
-Bu dosyayı okuyan yeni oturum: `/apps`, `/packages` iskeletini kurmaya, eski
-`app.py`/`requirements.txt` dosyalarını kaldırmaya ve "Uçtan Uca Akış" bölümündeki
-1. adımdan devam etmeye başlayabilir.
+**1. adım ("Temel iskelet") tamamlandı** — eski `app.py`/`requirements.txt` daha önce
+kaldırılmıştı. Bu oturumda kurulanlar:
+
+- pnpm workspace monorepo (`pnpm-workspace.yaml`, kök `package.json`, `tsconfig.base.json`)
+- `docker-compose.yml` — Postgres 16 + Redis 7 (healthcheck'li), `.env.example`
+- `packages/db` — yukarıdaki veri modelinin tamamını kapsayan Prisma şeması
+  (tenants, tenant_integrations, tenant_settings, customers, products, orders,
+  invoices, shipments, conversation_states, platform_admins, subscription_plans,
+  subscriptions, subscription_payments) + `prisma migrate dev` ile gerçek bir
+  Postgres'e uygulanıp doğrulandı (`migrations/20260709205239_init`)
+- `packages/integrations/{whatsapp,invoicing,shipping,billing}` — Meta Cloud API
+  istemcisi + webhook imza doğrulama; `InvoiceProvider`/`ShippingProvider` adaptör
+  arayüzleri ve ilk somut adaptörler (Parasut, Shipentegra); iyzico abonelik
+  istemcisi iskeleti (metotlar henüz "not implemented" — gerçek HMAC imzalama
+  9. adımda eklenecek)
+- `apps/api` — NestJS iskeleti, `/health` endpoint'i ile ayağa kalktığı doğrulandı
+- `apps/worker` — BullMQ worker iskeleti, üç kuyruk tanımlı
+  (`invoice-create`, `shipment-create`, `whatsapp-send`), Redis'e bağlanıp
+  başladığı doğrulandı
+- `apps/web` (tenant paneli) ve `apps/superadmin` — Next.js App Router iskeletleri,
+  ikisi de `next build` ile temiz derleniyor
+
+Tüm workspace `pnpm install` ile kuruluyor, `pnpm -r build` ile deriliyor;
+Docker Compose servisleri `docker compose up -d` ile ayağa kalkıyor (şu an
+`docker compose stop` ile durduruldu, veriler volume'lerde duruyor).
+
+Bir sonraki oturum **2. adım ("Tenant & auth")** ile devam etmeli: tenant kayıt/
+onboarding akışı (stok takibi aç/kapa + IBAN bilgisi bu adımda toplanacak),
+Clerk entegrasyonu, tenant bazlı yetkilendirme middleware'i (NestJS guard +
+Next.js middleware). Ardından 3. adımdaki WhatsApp webhook/konuşma botuna geçilecek.

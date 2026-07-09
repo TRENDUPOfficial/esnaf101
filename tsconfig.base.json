@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@esnaf101/db": ["packages/db/src"],
+      "@esnaf101/integrations-whatsapp": ["packages/integrations/whatsapp/src"],
+      "@esnaf101/integrations-invoicing": ["packages/integrations/invoicing/src"],
+      "@esnaf101/integrations-shipping": ["packages/integrations/shipping/src"],
+      "@esnaf101/integrations-billing": ["packages/integrations/billing/src"]
+    }
+  }
+}

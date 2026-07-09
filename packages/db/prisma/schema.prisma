@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Platform / süper admin
+// ---------------------------------------------------------------------------
+
+model PlatformAdmin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_admins")
+}
+
+model SubscriptionPlan {
+  id            String         @id @default(cuid())
+  name          String
+  monthlyPrice  Decimal        @map("monthly_price") @db.Decimal(10, 2)
+  orderLimit    Int?           @map("order_limit")
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+enum SubscriptionStatus {
+  active
+  suspended
+  cancelled
+}
+
+model Subscription {
+  id                 String              @id @default(cuid())
+  tenantId            String              @unique @map("tenant_id")
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId              String              @map("plan_id")
+  plan                 SubscriptionPlan    @relation(fields: [planId], references: [id])
+  status               SubscriptionStatus  @default(active)
+  activeUntil          DateTime            @map("active_until")
+  iyzicoCardToken     String?             @map("iyzico_card_token")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  payments             SubscriptionPayment[]
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionPaymentStatus {
+  success
+  failed
+}
+
+model SubscriptionPayment {
+  id             String                    @id @default(cuid())
+  subscriptionId String                    @map("subscription_id")
+  subscription   Subscription              @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  status         SubscriptionPaymentStatus
+  amount         Decimal                   @db.Decimal(10, 2)
+  iyzicoPaymentId String?                  @map("iyzico_payment_id")
+  failureReason  String?                   @map("failure_reason")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+
+  @@map("subscription_payments")
+}
+
+// ---------------------------------------------------------------------------
+// Tenant (satıcı) çekirdek
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  integration       TenantIntegration?
+  settings          TenantSettings?
+  subscription      Subscription?
+  customers         Customer[]
+  products          Product[]
+  orders            Order[]
+  conversationStates ConversationState[]
+
+  @@map("tenants")
+}
+
+enum InvoiceProviderType {
+  parasut
+}
+
+enum ShippingProviderType {
+  shipentegra
+}
+
+model TenantIntegration {
+  id                     String                 @id @default(cuid())
+  tenantId               String                 @unique @map("tenant_id")
+  tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  whatsappPhoneNumberId  String?                @map("whatsapp_phone_number_id")
+  whatsappAccessToken    String?                @map("whatsapp_access_token")
+  invoiceProvider        InvoiceProviderType?   @map("invoice_provider")
+  invoiceApiKey          String?                @map("invoice_api_key")
+  shippingProvider       ShippingProviderType?  @map("shipping_provider")
+  shippingApiKey         String?                @map("shipping_api_key")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+
+  @@map("tenant_integrations")
+}
+
+model TenantSettings {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique @map("tenant_id")
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stockTrackingEnabled  Boolean  @default(false) @map("stock_tracking_enabled")
+  iban                  String?
+  ibanAccountHolder     String?  @map("iban_account_holder")
+  shippingNotifyTemplate String? @map("shipping_notify_template")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Müşteri / ürün / sipariş
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  waId      String   @map("wa_id")
+  fullName  String?  @map("full_name")
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders             Order[]
+  conversationStates ConversationState[]
+
+  @@unique([tenantId, waId])
+  @@map("customers")
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  sku          String?
+  description  String?
+  barcode      String?
+  listPrice    Decimal? @map("list_price") @db.Decimal(10, 2)
+  category     String?
+  stockQty     Int?     @map("stock_qty")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@unique([tenantId, sku])
+  @@map("products")
+}
+
+enum OrderStatus {
+  new
+  awaiting_product_price
+  invoiced
+  awaiting_payment
+  paid
+  shipped
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  tenantId        String      @map("tenant_id")
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId      String      @map("customer_id")
+  customer        Customer    @relation(fields: [customerId], references: [id])
+  productId       String?     @map("product_id")
+  product         Product?    @relation(fields: [productId], references: [id])
+  screenshotUrl   String?     @map("screenshot_url")
+  rawDescription  String?     @map("raw_description")
+  price           Decimal?    @db.Decimal(10, 2)
+  status          OrderStatus @default(new)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  invoice  Invoice?
+  shipment Shipment?
+
+  @@map("orders")
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  orderId        String   @unique @map("order_id")
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider       InvoiceProviderType
+  externalRef    String?  @map("external_ref")
+  pdfUrl         String?  @map("pdf_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("invoices")
+}
+
+model Shipment {
+  id             String   @id @default(cuid())
+  orderId        String   @unique @map("order_id")
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  carrier        String?
+  trackingNumber String?  @map("tracking_number")
+  labelUrl       String?  @map("label_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("shipments")
+}
+
+enum ConversationStep {
+  awaiting_screenshot
+  awaiting_name
+  awaiting_address
+  done
+}
+
+model ConversationState {
+  id         String           @id @default(cuid())
+  tenantId   String           @map("tenant_id")
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId String           @map("customer_id")
+  customer   Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  step       ConversationStep @default(awaiting_screenshot)
+  context    Json?
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  @@unique([tenantId, customerId])
+  @@map("conversation_states")
+}

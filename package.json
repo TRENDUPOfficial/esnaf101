@@ -1,0 +1,32 @@
+{
+  "name": "esnaf101",
+  "private": true,
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev:api": "pnpm --filter @esnaf101/api dev",
+    "dev:worker": "pnpm --filter @esnaf101/worker dev",
+    "dev:web": "pnpm --filter @esnaf101/web dev",
+    "dev:superadmin": "pnpm --filter @esnaf101/superadmin dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "prisma:generate": "pnpm --filter @esnaf101/db prisma:generate",
+    "prisma:migrate": "pnpm --filter @esnaf101/db prisma:migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma"
+    ]
+  }
+}
