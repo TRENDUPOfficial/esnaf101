@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, ApiError } from "../../../lib/api";
 import { CenteredLayout } from "../../../components/CenteredLayout";
 import { Card, CardBody, CardHeader } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
@@ -25,14 +25,24 @@ export default function OnboardingSettingsPage() {
     setSubmitting(true);
     try {
       const token = await getToken();
-      await apiFetch("/tenants/me/onboarding", token, {
-        method: "PATCH",
-        body: JSON.stringify({
-          stockTrackingEnabled,
-          iban: iban.replace(/\s+/g, "").toUpperCase(),
-          ibanAccountHolder,
-        }),
+      const body = JSON.stringify({
+        stockTrackingEnabled,
+        iban: iban.replace(/\s+/g, "").toUpperCase(),
+        ibanAccountHolder,
       });
+      try {
+        await apiFetch("/tenants/me/onboarding", token, { method: "PATCH", body });
+      } catch (err) {
+        // Organizasyon az önce oluşturulduysa Clerk'in önbelleğe alınmış
+        // oturum jetonu henüz org claim'ini taşımıyor olabilir — taze bir
+        // token ile bir kez daha dene.
+        if (err instanceof ApiError && err.status === 403) {
+          const freshToken = await getToken({ skipCache: true });
+          await apiFetch("/tenants/me/onboarding", freshToken, { method: "PATCH", body });
+        } else {
+          throw err;
+        }
+      }
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Beklenmeyen bir hata oluştu");
