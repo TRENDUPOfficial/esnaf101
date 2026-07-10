@@ -58,10 +58,18 @@ export class ClerkAuthGuard implements CanActivate {
       throw new UnauthorizedException("Geçersiz veya süresi dolmuş oturum");
     }
 
+    // Clerk oturum JWT'si iki farklı biçimde organizasyon bilgisi taşıyabilir:
+    // eski biçimde düz `org_id`/`org_role`, yeni (v2) biçimde ise iç içe
+    // `o: { id, rol }` nesnesi (bkz. @clerk/shared VersionedJwtPayload).
+    // Hangisinin geleceği Clerk instance ayarına bağlı olduğundan ikisini de
+    // desteklemek gerekiyor — yalnızca eskisine bakmak, yeni biçimi kullanan
+    // instance'larda organizasyon hep boş görünmesine yol açıyordu.
+    const legacyPayload = payload as { org_id?: string; org_role?: string };
+    const versionedPayload = payload as { o?: { id?: string; rol?: string } };
     request.auth = {
       userId: payload.sub,
-      orgId: (payload as { org_id?: string }).org_id,
-      orgRole: (payload as { org_role?: string }).org_role,
+      orgId: legacyPayload.org_id ?? versionedPayload.o?.id,
+      orgRole: legacyPayload.org_role ?? versionedPayload.o?.rol,
     };
 
     const skipTenant = this.reflector.getAllAndOverride<boolean>(SKIP_TENANT_KEY, [
