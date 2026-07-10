@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { serverApiFetch } from "../../lib/server-api";
+import { serverApiFetch } from "../../../lib/server-api";
 
 export async function assignPrice(orderId: string, formData: FormData) {
   const productId = String(formData.get("productId") ?? "");

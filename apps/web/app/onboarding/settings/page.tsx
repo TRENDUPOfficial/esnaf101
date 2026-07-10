@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "../../../lib/api";
+import { CenteredLayout } from "../../../components/CenteredLayout";
+import { Card, CardBody, CardHeader } from "../../../components/ui/Card";
+import { Button } from "../../../components/ui/Button";
+import { Input, Label } from "../../../components/ui/Field";
+import { AlertIcon } from "../../../components/icons";
 
 export default function OnboardingSettingsPage() {
   const { getToken } = useAuth();
@@ -37,48 +42,61 @@ export default function OnboardingSettingsPage() {
   }
 
   return (
-    <main style={{ maxWidth: 480, margin: "3rem auto", padding: "0 1rem" }}>
-      <h1>Son adım: işletme ayarları</h1>
-      <p>Bu bilgileri daha sonra panelden değiştirebilirsiniz.</p>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input
-            type="checkbox"
-            checked={stockTrackingEnabled}
-            onChange={(e) => setStockTrackingEnabled(e.target.checked)}
-          />
-          Stok takibini aktif et
-        </label>
+    <CenteredLayout>
+      <Card className="w-full max-w-sm">
+        <CardHeader title="Son adım: işletme ayarları" description="Bu bilgileri daha sonra panelden değiştirebilirsiniz." />
+        <CardBody>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={stockTrackingEnabled}
+                onChange={(e) => setStockTrackingEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+              />
+              Stok takibini aktif et
+            </label>
 
-        <label>
-          IBAN
-          <input
-            type="text"
-            required
-            value={iban}
-            onChange={(e) => setIban(e.target.value)}
-            placeholder="TR000000000000000000000000"
-            maxLength={26}
-          />
-        </label>
+            <div>
+              <Label htmlFor="iban">IBAN</Label>
+              <Input
+                id="iban"
+                type="text"
+                required
+                value={iban}
+                onChange={(e) => setIban(e.target.value)}
+                placeholder="TR000000000000000000000000"
+                maxLength={26}
+                className="w-full"
+              />
+            </div>
 
-        <label>
-          Hesap sahibi
-          <input
-            type="text"
-            required
-            value={ibanAccountHolder}
-            onChange={(e) => setIbanAccountHolder(e.target.value)}
-            placeholder="Ad Soyad / Şirket Ünvanı"
-          />
-        </label>
+            <div>
+              <Label htmlFor="ibanAccountHolder">Hesap sahibi</Label>
+              <Input
+                id="ibanAccountHolder"
+                type="text"
+                required
+                value={ibanAccountHolder}
+                onChange={(e) => setIbanAccountHolder(e.target.value)}
+                placeholder="Ad Soyad / Şirket Ünvanı"
+                className="w-full"
+              />
+            </div>
 
-        {error && <p style={{ color: "crimson" }}>{error}</p>}
+            {error && (
+              <p className="flex items-center gap-1.5 text-sm text-rose-600">
+                <AlertIcon className="h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            )}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Kaydediliyor..." : "Kurulumu tamamla"}
-        </button>
-      </form>
-    </main>
+            <Button type="submit" disabled={submitting} className="w-full">
+              {submitting ? "Kaydediliyor..." : "Kurulumu tamamla"}
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
+    </CenteredLayout>
   );
 }

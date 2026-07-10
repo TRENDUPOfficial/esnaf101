@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { AppShell } from "../../components/AppShell";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Card, CardBody } from "../../components/ui/Card";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { TenantStatusBadge } from "../../components/ui/Badge";
 import { adminApiFetch } from "../../lib/api";
 import { setTenantStatus } from "./actions";
 
@@ -14,41 +19,57 @@ export default async function TenantsPage() {
   const tenants = (await adminApiFetch("/admin/tenants")) as TenantRow[];
 
   return (
-    <main style={{ padding: "2rem 1rem", maxWidth: 960, margin: "0 auto" }}>
-      <h1>Tenant&apos;lar</h1>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: "left" }}>Ad</th>
-            <th style={{ textAlign: "left" }}>Durum</th>
-            <th style={{ textAlign: "left" }}>Plan</th>
-            <th style={{ textAlign: "right" }}>Sipariş</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {tenants.map((t) => (
-            <tr key={t.id}>
-              <td>
-                <Link href={`/tenants/${t.id}`}>{t.name}</Link>
-              </td>
-              <td>{t.status}</td>
-              <td>{t.subscription?.plan.name ?? "-"}</td>
-              <td style={{ textAlign: "right" }}>{t._count.orders}</td>
-              <td>
-                <form action={setTenantStatus.bind(null, t.id, t.status === "suspended" ? "active" : "suspended")}>
-                  <button type="submit">{t.status === "suspended" ? "Aktifleştir" : "Askıya al"}</button>
-                </form>
-              </td>
-            </tr>
-          ))}
-          {tenants.length === 0 && (
-            <tr>
-              <td colSpan={5}>Henüz tenant yok.</td>
-            </tr>
+    <AppShell>
+      <div className="mx-auto max-w-4xl">
+        <PageHeader title="Tenant'lar" description="Platformdaki tüm satıcı hesapları" />
+        <Card>
+          {tenants.length === 0 ? (
+            <CardBody>
+              <EmptyState message="Henüz tenant yok." />
+            </CardBody>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase tracking-wide text-slate-400">
+                  <th className="px-5 py-3 font-medium">Ad</th>
+                  <th className="px-5 py-3 font-medium">Durum</th>
+                  <th className="px-5 py-3 font-medium">Plan</th>
+                  <th className="px-5 py-3 text-right font-medium">Sipariş</th>
+                  <th className="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {tenants.map((t) => (
+                  <tr key={t.id}>
+                    <td className="px-5 py-3 font-medium text-slate-900">
+                      <Link href={`/tenants/${t.id}`} className="hover:text-indigo-600">
+                        {t.name}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3">
+                      <TenantStatusBadge status={t.status} />
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">{t.subscription?.plan.name ?? "-"}</td>
+                    <td className="px-5 py-3 text-right text-slate-600">{t._count.orders}</td>
+                    <td className="px-5 py-3 text-right">
+                      <form action={setTenantStatus.bind(null, t.id, t.status === "suspended" ? "active" : "suspended")}>
+                        <button
+                          type="submit"
+                          className={`text-sm font-medium ${
+                            t.status === "suspended" ? "text-emerald-600 hover:text-emerald-700" : "text-slate-400 hover:text-rose-600"
+                          }`}
+                        >
+                          {t.status === "suspended" ? "Aktifleştir" : "Askıya al"}
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
-        </tbody>
-      </table>
-    </main>
+        </Card>
+      </div>
+    </AppShell>
   );
 }

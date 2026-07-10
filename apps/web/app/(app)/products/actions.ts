@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { serverApiFetch } from "../../lib/server-api";
+import { serverApiFetch } from "../../../lib/server-api";
 
 export async function createProduct(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();

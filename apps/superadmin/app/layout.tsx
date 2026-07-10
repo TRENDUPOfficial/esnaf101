@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./globals.css";
 
 export const metadata = {
   title: "Esnaf101 — Süper Admin",
@@ -7,7 +8,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="tr">
-      <body>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

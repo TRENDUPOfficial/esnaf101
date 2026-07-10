@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { serverApiFetch } from "../../lib/server-api";
+import { serverApiFetch } from "../../../lib/server-api";
 
 function strOrUndefined(formData: FormData, key: string): string | undefined {
   const v = String(formData.get(key) ?? "").trim();

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { apiFetch } from "../../lib/api";
+import { apiFetch } from "../../../lib/api";
 
 interface ProductOption {
   id: string;
@@ -51,7 +51,7 @@ export function ProductAutocomplete({ name }: { name: string }) {
   }, []);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", minWidth: 220 }}>
+    <div ref={containerRef} className="relative min-w-[220px] flex-1">
       <input
         type="text"
         placeholder="Ürün ara..."
@@ -64,29 +64,15 @@ export function ProductAutocomplete({ name }: { name: string }) {
         onFocus={() => setOpen(true)}
         required
         autoComplete="off"
-        style={{ width: "100%" }}
+        className="block w-full rounded-lg border-0 px-3 py-2 text-sm text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-amber-500"
       />
       <input type="hidden" name={name} value={selected?.id ?? ""} />
       {open && options.length > 0 && (
-        <ul
-          style={{
-            position: "absolute",
-            zIndex: 10,
-            background: "Canvas",
-            color: "CanvasText",
-            border: "1px solid #888",
-            listStyle: "none",
-            margin: 0,
-            padding: 0,
-            width: "100%",
-            maxHeight: 200,
-            overflowY: "auto",
-          }}
-        >
+        <ul className="absolute z-10 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
           {options.map((option) => (
             <li
               key={option.id}
-              style={{ padding: "0.25rem 0.5rem", cursor: "pointer" }}
+              className="cursor-pointer px-3 py-2 text-sm text-slate-700 hover:bg-amber-50"
               onClick={() => {
                 setSelected(option);
                 setQuery("");
@@ -94,9 +80,13 @@ export function ProductAutocomplete({ name }: { name: string }) {
                 setOpen(false);
               }}
             >
-              {option.name}
-              {option.sku ? ` (${option.sku})` : ""}
-              {option.stockQty === 0 ? " — stok yok" : option.stockQty !== null ? ` — stok: ${option.stockQty}` : ""}
+              <span className="font-medium text-slate-900">{option.name}</span>
+              {option.sku ? <span className="text-slate-400"> ({option.sku})</span> : null}
+              {option.stockQty === 0 ? (
+                <span className="ml-1.5 text-rose-500">stok yok</span>
+              ) : option.stockQty !== null ? (
+                <span className="ml-1.5 text-slate-400">stok: {option.stockQty}</span>
+              ) : null}
             </li>
           ))}
         </ul>

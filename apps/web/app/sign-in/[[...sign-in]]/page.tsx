@@ -1,9 +1,10 @@
 import { SignIn } from "@clerk/nextjs";
+import { CenteredLayout } from "../../../components/CenteredLayout";
 
 export default function SignInPage() {
   return (
-    <main style={{ display: "flex", justifyContent: "center", padding: "3rem 1rem" }}>
+    <CenteredLayout>
       <SignIn />
-    </main>
+    </CenteredLayout>
   );
 }

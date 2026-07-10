@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { Button } from "../../components/ui/Button";
+import { Input, Label } from "../../components/ui/Field";
+import { AlertIcon } from "../../components/icons";
 import { confirmCode, requestLogin } from "./actions";
 
 type Stage = "credentials" | "setup" | "verify";
@@ -53,60 +57,91 @@ export function LoginFlow() {
 
   if (stage === "credentials") {
     return (
-      <form onSubmit={handleCredentialsSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: 320 }}>
-        <h1>Süper Admin Girişi</h1>
-        {error && <p style={{ color: "crimson" }}>{error}</p>}
-        <input
-          type="email"
-          placeholder="E-posta"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoFocus
-        />
-        <input
-          type="password"
-          placeholder="Şifre"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <button type="submit" disabled={pending}>
-          {pending ? "..." : "Devam et"}
-        </button>
-      </form>
+      <Card className="w-full max-w-sm">
+        <CardHeader title="Giriş yap" description="Süper admin hesabınızla devam edin" />
+        <CardBody>
+          <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="email">E-posta</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus
+                className="w-full"
+              />
+            </div>
+            <div>
+              <Label htmlFor="password">Şifre</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full"
+              />
+            </div>
+            {error && (
+              <p className="flex items-center gap-1.5 text-sm text-rose-600">
+                <AlertIcon className="h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            )}
+            <Button type="submit" disabled={pending} className="w-full">
+              {pending ? "..." : "Devam et"}
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
     );
   }
 
   return (
-    <form onSubmit={handleCodeSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: 380 }}>
-      <h1>{stage === "setup" ? "İki Adımlı Doğrulama Kurulumu" : "Doğrulama Kodu"}</h1>
-      {stage === "setup" && (
-        <>
-          <p>
-            Google Authenticator / Authy gibi bir doğrulayıcı uygulamada &quot;elle gir&quot; seçeneğiyle bu sırrı
-            ekleyin, sonra uygulamanın gösterdiği 6 haneli kodu girin. Bu ekranı tekrar göremeyeceksiniz.
-          </p>
-          <code style={{ wordBreak: "break-all", background: "rgba(128,128,128,0.15)", padding: "0.5rem", borderRadius: 4 }}>
-            {secret}
-          </code>
-          <p style={{ fontSize: "0.75rem", opacity: 0.7, wordBreak: "break-all" }}>{otpAuthUrl}</p>
-        </>
-      )}
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder="6 haneli kod"
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-        maxLength={6}
-        required
-        autoFocus
+    <Card className="w-full max-w-sm">
+      <CardHeader
+        title={stage === "setup" ? "İki adımlı doğrulama kurulumu" : "Doğrulama kodu"}
+        description={
+          stage === "setup"
+            ? "Google Authenticator / Authy gibi bir uygulamada \"elle gir\" seçeneğiyle bu sırrı ekleyin, sonra kodu girin."
+            : "Doğrulayıcı uygulamanızdaki 6 haneli kodu girin"
+        }
       />
-      <button type="submit" disabled={pending}>
-        {pending ? "..." : "Doğrula"}
-      </button>
-    </form>
+      <CardBody>
+        <form onSubmit={handleCodeSubmit} className="space-y-4">
+          {stage === "setup" && (
+            <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+              <code className="block break-all text-xs text-slate-700">{secret}</code>
+              <p className="break-all text-xs text-slate-400">{otpAuthUrl}</p>
+            </div>
+          )}
+          <div>
+            <Label htmlFor="code">6 haneli kod</Label>
+            <Input
+              id="code"
+              type="text"
+              inputMode="numeric"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              maxLength={6}
+              required
+              autoFocus
+              className="w-full text-center text-lg tracking-[0.5em]"
+            />
+          </div>
+          {error && (
+            <p className="flex items-center gap-1.5 text-sm text-rose-600">
+              <AlertIcon className="h-4 w-4 shrink-0" />
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={pending} className="w-full">
+            {pending ? "..." : "Doğrula"}
+          </Button>
+        </form>
+      </CardBody>
+    </Card>
   );
 }
