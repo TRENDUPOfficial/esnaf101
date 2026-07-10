@@ -13,14 +13,58 @@
 # işaretli env değişkenlerini Render Dashboard'dan elle girmen gerekir
 # (gerçek Clerk/WhatsApp/Paraşüt/Shipentegra/iyzico kimlik bilgileri —
 # hiçbiri bu repoda/dosyada yok).
+#
+# İLK DENEME (ücretsiz katman): apps/worker (BullMQ arka plan işçisi) Render'da
+# ücretsiz planı desteklemiyor (sadece web servisleri, Postgres ve Key Value
+# için ücretsiz plan var) — bu yüzden şimdilik bu dosyadan çıkarıldı. Onsuz
+# panel, giriş, ürün/müşteri/sipariş CRUD'u çalışır; sadece kuyruğa atılan
+# işler (fatura oluşturma, kargo oluşturma, WhatsApp mesaj gönderimi) işlenmez.
+# Kart eklenip gerçek arka plan işleme istendiğinde apps/worker'ı starter (veya
+# üzeri) planla geri eklemek yeterli — bkz. commit geçmişinde eski hali.
 
-envVarGroups:
-  - name: esnaf101-shared
+databases:
+  - name: esnaf101-db
+    databaseName: esnaf101
+    user: esnaf101
+    plan: free
+
+services:
+  - type: redis
+    name: esnaf101-redis
+    plan: free
+    ipAllowList: [] # boş = yalnızca bu Render hesabındaki servislere açık
+
+  - type: web
+    name: esnaf101-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
     envVars:
-      # apps/api ve apps/worker'da BİREBİR AYNI olmalı — Environment Group
-      # bunu otomatik sağlıyor.
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esnaf101-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: esnaf101-redis
+          property: connectionString
       - key: APP_ENCRYPTION_KEY
         generateValue: true
+      - key: PLATFORM_ADMIN_JWT_SECRET
+        generateValue: true
+      # app.esnaf101.com,admin.esnaf101.com gibi virgülle ayrılmış liste —
+      # bkz. apps/api/src/main.ts resolveAllowedOrigins().
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SIGNING_SECRET
+        sync: false
       - key: WHATSAPP_APP_SECRET
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
@@ -34,8 +78,9 @@ envVarGroups:
       - key: IYZICO_BASE_URL
         value: https://sandbox-api.iyzipay.com
       # Tanımsız bırakılırsa ObjectStorage yerel diske düşer (bkz.
-      # @esnaf101/integrations-storage) — tek instance'lı bir deploy'da
-      # bile production için önerilmez, gerçek bir R2/S3 bucket'ı girin.
+      # @esnaf101/integrations-storage) — ücretsiz web servisinin diski kalıcı
+      # olmadığından (her redeploy'da silinir) gerçek kullanım için mutlaka
+      # bir R2/S3 bucket'ı girilmeli.
       - key: S3_ENDPOINT
         sync: false
       - key: S3_ACCESS_KEY_ID
@@ -45,73 +90,12 @@ envVarGroups:
       - key: S3_BUCKET
         sync: false
 
-databases:
-  - name: esnaf101-db
-    databaseName: esnaf101
-    user: esnaf101
-    plan: basic-256mb
-
-services:
-  - type: redis
-    name: esnaf101-redis
-    plan: starter
-    ipAllowList: [] # boş = yalnızca bu Render hesabındaki servislere açık
-
-  - type: web
-    name: esnaf101-api
-    runtime: docker
-    dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: .
-    plan: starter
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: esnaf101-shared
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: esnaf101-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: esnaf101-redis
-          property: connectionString
-      - key: PLATFORM_ADMIN_JWT_SECRET
-        generateValue: true
-      # app.esnaf101.com,admin.esnaf101.com gibi virgülle ayrılmış liste —
-      # bkz. apps/api/src/main.ts resolveAllowedOrigins().
-      - key: ALLOWED_ORIGINS
-        sync: false
-      - key: CLERK_SECRET_KEY
-        sync: false
-      - key: CLERK_WEBHOOK_SIGNING_SECRET
-        sync: false
-
-  - type: worker
-    name: esnaf101-worker
-    runtime: docker
-    dockerfilePath: ./apps/worker/Dockerfile
-    dockerContext: .
-    plan: starter
-    envVars:
-      - fromGroup: esnaf101-shared
-      - key: DATABASE_URL
-        fromDatabase:
-          name: esnaf101-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: esnaf101-redis
-          property: connectionString
-
   - type: web
     name: esnaf101-web
     runtime: docker
     dockerfilePath: ./apps/web/Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     envVars:
       # NEXT_PUBLIC_* build-time'da bundle'a gömülür (bkz. apps/web/Dockerfile
       # ARG'ları) — Render Docker servislerinde env var'lar otomatik build
@@ -129,7 +113,7 @@ services:
     runtime: docker
     dockerfilePath: ./apps/superadmin/Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     envVars:
       - key: NEXT_PUBLIC_API_URL
         sync: false

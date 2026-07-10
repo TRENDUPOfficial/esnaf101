@@ -218,10 +218,22 @@ hiçbiri kendiliğinden aktifleşmez. Sırayla:
 
 1. **Render hesabı + Blueprint**: Render Dashboard'da "New > Blueprint",
    `TRENDUPOfficial/esnaf101` repo'sunu bağla. Render kök dizindeki
-   `render.yaml`'ı okuyup Postgres + Redis + 4 servisi (api/worker/web/
-   superadmin) otomatik oluşturur. (`render.yaml` bu ortamda gerçek bir
-   Render hesabına karşı test edilmedi — ilk denemede küçük düzeltmeler
-   gerekebilir, bkz. dosyanın başındaki not.)
+   `render.yaml`'ı okuyup Postgres + Redis + 3 servisi (api/web/superadmin)
+   ücretsiz planda otomatik oluşturur — kart bilgisi gerektirmez. İlk canlı
+   denemede gerçek Render parser'ıyla karşılaşılan ve düzeltilen sorunlar:
+   - Render'ın Blueprint şemasında servis seviyesinde ayrı bir
+     `envVarGroups:` alanı yok ("field envVarGroups not found in type
+     file.Service") — bu yüzden paylaşılan değişkenler `esnaf101-api`
+     servisine doğrudan gömüldü, ayrı bir env var group tanımı kaldırıldı.
+   - `apps/worker` (BullMQ arka plan işçisi) Render'da ücretsiz planı
+     desteklemiyor (yalnızca web servisleri, Postgres ve Key Value ücretsiz) —
+     bu yüzden ilk deploy'dan çıkarıldı. Onsuz panel/giriş/CRUD çalışır,
+     sadece kuyruğa atılan işler (fatura/kargo oluşturma, WhatsApp gönderimi)
+     işlenmez. Kart eklenip gerçek arka plan işleme istendiğinde
+     `apps/worker`'ı starter (veya üzeri) planla `render.yaml`'a geri eklemek
+     gerekir — o zaman `APP_ENCRYPTION_KEY`'in api ile worker'da birebir aynı
+     olması gerektiği unutulmamalı (elle kopyalanmalı ya da env var group'a
+     geri dönülmeli).
 2. **`sync: false` işaretli env değişkenlerini gir** (Render Dashboard'dan,
    servis servis): `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`,
    `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `ALLOWED_ORIGINS` (prod domain'ler,
