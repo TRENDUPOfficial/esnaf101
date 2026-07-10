@@ -6,11 +6,17 @@ import {
   Post,
   Req,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { Webhook } from "svix";
 import { PrismaClient } from "@esnaf101/db";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request } from "express";
 import { Public } from "../auth/public.decorator";
+
+// İmza doğrulaması zaten güvenliği sağlıyor — burada asıl amaç Clerk'in
+// paylaşılan gönderici IP'lerinden gelen meşru trafiğin genel limite takılıp
+// başka tenant'ları etkilememesi.
+const WEBHOOK_THROTTLE = { default: { ttl: 60_000, limit: 300 } };
 
 interface ClerkWebhookEvent {
   type: string;
@@ -34,6 +40,7 @@ export class ClerkWebhookController {
   constructor(private readonly prisma: PrismaClient) {}
 
   @Public()
+  @Throttle(WEBHOOK_THROTTLE)
   @Post()
   @HttpCode(200)
   async handle(

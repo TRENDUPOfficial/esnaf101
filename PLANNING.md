@@ -210,6 +210,42 @@ docker-compose.yml
   hata senaryolarıyla (geçersiz API anahtarı, zaman aşımı) birlikte test etme.
 - Prisma migration'ların temiz bir veritabanında sorunsuz çalıştığını doğrulama.
 
+## Canlıya Alma (Deploy) Checklist
+
+Kod ve altyapı tanımı (Dockerfile'lar, `render.yaml`) hazır ve yerel olarak
+doğrulandı — ama gerçek bir barındırma/DNS/üçüncü parti hesabı bağlanmadan
+hiçbiri kendiliğinden aktifleşmez. Sırayla:
+
+1. **Render hesabı + Blueprint**: Render Dashboard'da "New > Blueprint",
+   `TRENDUPOfficial/esnaf101` repo'sunu bağla. Render kök dizindeki
+   `render.yaml`'ı okuyup Postgres + Redis + 4 servisi (api/worker/web/
+   superadmin) otomatik oluşturur. (`render.yaml` bu ortamda gerçek bir
+   Render hesabına karşı test edilmedi — ilk denemede küçük düzeltmeler
+   gerekebilir, bkz. dosyanın başındaki not.)
+2. **`sync: false` işaretli env değişkenlerini gir** (Render Dashboard'dan,
+   servis servis): `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SIGNING_SECRET`,
+   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `ALLOWED_ORIGINS` (prod domain'ler,
+   virgülle ayrılmış), `NEXT_PUBLIC_API_URL` (her iki panel için de api'nin
+   gerçek URL'si) — bunlar olmadan servisler ayağa kalkmaz/yanlış çalışır.
+   `WHATSAPP_*`/`IYZICO_*`/`S3_*` şu an boş bırakılabilir (ilgili özellikler
+   pasif kalır, sistemin geri kalanı çalışır) — gerçek hesaplar açılınca
+   doldurulur.
+3. **DNS**: `esnaf101.com` üzerinde `app.`/`admin.`/`api.` alt alan adlarını
+   Render'ın verdiği hedeflere yönlendir (Render, custom domain eklenince
+   CNAME/A kaydı talimatını gösterir).
+4. **Clerk prod ortamı**: Clerk Dashboard'da development instance'tan ayrı
+   bir production instance oluşturulmalı (gerçek domain doğrulaması ister),
+   webhook endpoint'i `https://api.esnaf101.com/webhooks/clerk`e
+   (organization.created olayına abone) yeniden tanımlanmalı.
+5. **İlk süper admin**: `platform_admins` tablosuna hiçbir self-servis kayıt
+   akışı yok (bilinçli — bkz. Adım 9 güvenlik notu). İlk admin, prod
+   veritabanına elle bir satır eklenerek (bcrypt hash'lenmiş şifreyle)
+   oluşturulmalı; ilk girişte 2FA kurulumu otomatik tetiklenir.
+6. **Üçüncü parti hesaplar** (WhatsApp Business Cloud API, Paraşüt,
+   Shipentegra, iyzico) — hiçbiri henüz açılmadı, bkz. yukarıdaki adım
+   notları. Bunlar olmadan sistem ayakta durur ve panel kullanılabilir,
+   sadece WhatsApp/fatura/kargo/abonelik tahsilatı akışları pasif kalır.
+
 ## Sonraki Adım
 
 **1. adım ("Temel iskelet") tamamlandı** — eski `app.py`/`requirements.txt` daha önce
@@ -502,6 +538,49 @@ sonra ayrı commit + push yapıldı:
 kimlik bilgisi olmadan anlamlı şekilde yazılıp doğrulanamaz — dunning/job planlama
 mekanizmasının geri kalanı tamamen gerçek ve test edilmiş durumda.
 
-Bundan sonraki doğal iş: gerçek sağlayıcı hesaplarının (Meta WABA, Paraşüt,
-Shipentegra, iyzico) bağlanıp sandbox'ta uçtan uca test edilmesi, panel tasarımı/UX
-inceliği, ve iyzico'nun gerçek imzalama mantığının yazılması.
+**Panel tasarımından sonra "sistemi hazır et" istendi** — üçüncü parti hesaplar
+(WhatsApp/Paraşüt/Shipentegra/iyzico) hâlâ yok ve gerçek hosting/DNS erişimi bu
+ortamda mevcut değil, o yüzden "hazır etmek" somut olarak şu anlama geldi:
+production güvenlik sertleştirmesi + tek dosyadan deploy edilebilir hale getirme
+(gerçek deploy'un kendisi kullanıcının Render hesabını gerektiriyor, bkz. yukarıdaki
+"Canlıya Alma" bölümü).
+
+- **`apps/api` güvenlik sertleştirmesi**:
+  - CORS artık `*` değil — `ALLOWED_ORIGINS` env değişkeninden (virgülle
+    ayrılmış) okunuyor; production'da bu değişken tanımsızsa uygulama
+    **başlamayı reddediyor** (sessizce açık CORS'a düşmesin diye). Dev'de
+    değişken yoksa sadece `localhost:*`e izin veriyor.
+  - `helmet()` eklendi (HSTS, X-Content-Type-Options, X-Frame-Options vb.).
+  - `@nestjs/throttler` global guard olarak eklendi (dk. başına IP başına 100
+    istek varsayılan). `admin/auth/login` ve `admin/auth/confirm-2fa`
+    dk. başına 5 istekle çok daha sıkı sınırlandı (TOTP kodu brute-force'una
+    karşı — 6 haneli bir kod deneme uzayı kısıtlı, rate limit olmadan
+    pratikte kaba kuvvetle kırılabilir). Clerk/WhatsApp webhook'ları ise
+    imza doğrulamasıyla zaten güvenli olduğundan ve paylaşılan gönderici
+    IP'lerinden gelebileceğinden (bir tenant'ın trafiği başka bir tenant'ı
+    etkilemesin diye) belirgin şekilde daha yüksek bir limitle işaretlendi.
+  - Hepsi gerçek HTTP istekleriyle doğrulandı: helmet başlıkları göründü,
+    izin verilmeyen origin'den istek CORS header'sız döndü, 6. login denemesi
+    429 ile reddedildi, ClerkAuthGuard'ın hâlâ doğru çalıştığı (throttler
+    guard'ın onu ezmediği) doğrulandı.
+- **`apps/web`/`apps/superadmin`**: `next.config.mjs`e temel güvenlik
+  başlıkları eklendi (X-Frame-Options: DENY — clickjacking'e karşı, özellikle
+  süper admin paneli için önemli). Ayrıca ikisinin de hiç kullanmadığı
+  `@esnaf101/db` bağımlılığı kaldırıldı (kod hiçbir yerde import etmiyordu) —
+  bu, Dockerfile'larını basitleştirdi (artık Prisma generate/OpenSSL adımı
+  gerekmiyor, build gözle görülür şekilde hızlandı) ve gereksiz bir
+  attack-surface/dependency'yi ortadan kaldırdı.
+- **`render.yaml`** (yeni, repo kökünde): Render Blueprint — Postgres, Redis,
+  ve 4 servisin (api/worker/web/superadmin) tamamını tek dosyadan tanımlıyor.
+  Paylaşılan sırlar (`APP_ENCRYPTION_KEY` vb.) bir Environment Group'ta
+  (`esnaf101-shared`) tutulup api+worker arasında otomatik senkron ediliyor.
+  **Gerçek bir Render hesabına karşı test edilemedi** (bu ortamda erişim yok)
+  — dosyanın başındaki not bunu açıkça belirtiyor; Render'ın Blueprint akışı
+  ilk bağlandığında söz dizimini kendi tarafında doğruluyor, küçük
+  düzeltmeler gerekebilir.
+
+Bundan sonraki doğal iş: kullanıcının gerçek bir Render hesabı açıp
+`render.yaml`'ı deneyip geri bildirim vermesi (yukarıdaki "Canlıya Alma"
+checklist'i), gerçek sağlayıcı hesaplarının (Meta WABA, Paraşüt, Shipentegra,
+iyzico) bağlanıp sandbox'ta uçtan uca test edilmesi, ve iyzico'nun gerçek
+imzalama mantığının yazılması.

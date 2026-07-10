@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@esnaf101/db": "workspace:*",
     "@clerk/localizations": "^4.13.1",
     "@clerk/nextjs": "^7.5.15",
     "next": "^15.3.9",

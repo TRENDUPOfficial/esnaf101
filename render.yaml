@@ -1,0 +1,137 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# NOT: Bu dosya gerçek bir Render hesabına karşı test edilmedi (bu ortamda
+# Render erişimi yok) — Render'ın "New > Blueprint" akışı repo'yu bağladığında
+# söz dizimini kendi tarafında doğrular/gösterir, ilk denemede küçük
+# düzeltmeler gerekebilir. PLANNING.md'deki "Barındırma" kararına göre
+# Railway/Render arasından Render seçildi (render.yaml ile tekrarlanabilir,
+# tek dosyadan kurulum sağlıyor); Railway tercih edilirse bu dosya railway'in
+# kendi formatına (Nixpacks/Dockerfile servisleri) çevrilmeli.
+#
+# Kurulum: Render Dashboard > New > Blueprint > bu repo'yu seç. Render bu
+# dosyayı okuyup aşağıdaki tüm servisleri otomatik oluşturur. "sync: false"
+# işaretli env değişkenlerini Render Dashboard'dan elle girmen gerekir
+# (gerçek Clerk/WhatsApp/Paraşüt/Shipentegra/iyzico kimlik bilgileri —
+# hiçbiri bu repoda/dosyada yok).
+
+envVarGroups:
+  - name: esnaf101-shared
+    envVars:
+      # apps/api ve apps/worker'da BİREBİR AYNI olmalı — Environment Group
+      # bunu otomatik sağlıyor.
+      - key: APP_ENCRYPTION_KEY
+        generateValue: true
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: IYZICO_API_KEY
+        sync: false
+      - key: IYZICO_SECRET_KEY
+        sync: false
+      - key: IYZICO_BASE_URL
+        value: https://sandbox-api.iyzipay.com
+      # Tanımsız bırakılırsa ObjectStorage yerel diske düşer (bkz.
+      # @esnaf101/integrations-storage) — tek instance'lı bir deploy'da
+      # bile production için önerilmez, gerçek bir R2/S3 bucket'ı girin.
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+
+databases:
+  - name: esnaf101-db
+    databaseName: esnaf101
+    user: esnaf101
+    plan: basic-256mb
+
+services:
+  - type: redis
+    name: esnaf101-redis
+    plan: starter
+    ipAllowList: [] # boş = yalnızca bu Render hesabındaki servislere açık
+
+  - type: web
+    name: esnaf101-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVarGroups:
+      - esnaf101-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esnaf101-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: esnaf101-redis
+          property: connectionString
+      - key: PLATFORM_ADMIN_JWT_SECRET
+        generateValue: true
+      # app.esnaf101.com,admin.esnaf101.com gibi virgülle ayrılmış liste —
+      # bkz. apps/api/src/main.ts resolveAllowedOrigins().
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SIGNING_SECRET
+        sync: false
+
+  - type: worker
+    name: esnaf101-worker
+    runtime: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVarGroups:
+      - esnaf101-shared
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esnaf101-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: esnaf101-redis
+          property: connectionString
+
+  - type: web
+    name: esnaf101-web
+    runtime: docker
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      # NEXT_PUBLIC_* build-time'da bundle'a gömülür (bkz. apps/web/Dockerfile
+      # ARG'ları) — Render Docker servislerinde env var'lar otomatik build
+      # arg olarak da geçirilir.
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      # api servisinin gerçek (custom domain bağlandıktan sonraki) URL'si.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+
+  - type: web
+    name: esnaf101-superadmin
+    runtime: docker
+    dockerfilePath: ./apps/superadmin/Dockerfile
+    dockerContext: .
+    plan: starter
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

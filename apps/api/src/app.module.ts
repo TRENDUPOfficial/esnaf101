@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { ClerkAuthGuard } from "./auth/clerk-auth.guard";
 import { CustomersModule } from "./customers/customers.module";
 import { HealthController } from "./health/health.controller";
@@ -16,6 +17,10 @@ import { WhatsAppModule } from "./whatsapp/whatsapp.module";
 
 @Module({
   imports: [
+    // Genel varsayılan: dakikada 100 istek/IP. Brute-force'a hassas uçlar
+    // (admin login/2FA) kendi controller'larında daha sıkı bir @Throttle
+    // ile override ediyor.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     QueueModule,
     TenantsModule,
@@ -29,6 +34,9 @@ import { WhatsAppModule } from "./whatsapp/whatsapp.module";
     PlatformAdminModule,
   ],
   controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: ClerkAuthGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: ClerkAuthGuard },
+  ],
 })
 export class AppModule {}

@@ -1,4 +1,5 @@
 import { BadRequestException, Controller, Get, HttpCode, Inject, Post, Query, Req, Res } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { Queue } from "bullmq";
@@ -8,6 +9,11 @@ import type { WhatsAppInboundMessage, WhatsAppWebhookPayload } from "@esnaf101/i
 import { Public } from "../auth/public.decorator";
 import { QUEUE_NAMES } from "../queue/queue-names";
 import { WHATSAPP_INBOUND_QUEUE } from "../queue/queue.module";
+
+// İmza doğrulaması zaten güvenliği sağlıyor — canlı yayın sırasında tüm
+// tenant'lardan gelen mesajlar Meta'nın paylaşılan IP'lerinden aynı anda
+// gönderilebilir, bu yüzden global limitten belirgin şekilde yüksek.
+const WEBHOOK_THROTTLE = { default: { ttl: 60_000, limit: 1000 } };
 
 export interface WhatsAppInboundJobData {
   tenantId: string;
@@ -26,6 +32,7 @@ export interface WhatsAppInboundJobData {
  * oluşturma) `whatsapp-inbound` kuyruğuna devredip hemen 200 döner — Meta
  * birkaç saniye içinde yanıt alamazsa webhook'u yeniden dener/askıya alır.
  */
+@Throttle(WEBHOOK_THROTTLE)
 @Controller("webhooks/whatsapp")
 export class WhatsAppWebhookController {
   constructor(
