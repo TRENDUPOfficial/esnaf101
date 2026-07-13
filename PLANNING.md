@@ -258,6 +258,14 @@ hiçbiri kendiliğinden aktifleşmez. Sırayla:
    notları. Bunlar olmadan sistem ayakta durur ve panel kullanılabilir,
    sadece WhatsApp/fatura/kargo/abonelik tahsilatı akışları pasif kalır.
 
+**Ücretsiz plan uykuya alma**: Render'ın ücretsiz web servisleri ~15 dakika
+hareketsizlikten sonra uykuya geçiyor, ilk isteği 50+ saniye geciktiriyor.
+`.github/workflows/keep-alive.yml` her 10 dakikada bir üç servise de (api
+`/health`, web `/sign-in`, superadmin `/login`) hafif bir istek atarak
+uyanık tutuyor — harici bir hesap/servis gerektirmiyor, mevcut GitHub
+Actions üzerinden çalışıyor. Ücretli plana geçilince bu iş artık gerekmez,
+kaldırılabilir.
+
 ## Sonraki Adım
 
 **1. adım ("Temel iskelet") tamamlandı** — eski `app.py`/`requirements.txt` daha önce

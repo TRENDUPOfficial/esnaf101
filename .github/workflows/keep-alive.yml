@@ -1,0 +1,22 @@
+name: Keep Render services awake
+
+# Render'ın ücretsiz planı ~15 dakika hareketsizlikten sonra servisleri
+# uykuya alıyor, ilk isteği 50+ saniye geciktiriyor (bkz. PLANNING.md
+# "Canlıya Alma" notları). Bu iş her 10 dakikada bir üç servise de hafif bir
+# istek atıp uyanık tutuyor. GitHub'ın cron zamanlaması "en az" bu aralık
+# demektir, gecikme olabilir — garantili değil ama pratikte yeterli.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping esnaf101-api
+        run: curl -sf -o /dev/null --max-time 60 https://esnaf101-api.onrender.com/health || true
+      - name: Ping esnaf101-web
+        run: curl -sf -o /dev/null --max-time 60 https://esnaf101-web.onrender.com/sign-in || true
+      - name: Ping esnaf101-superadmin
+        run: curl -sf -o /dev/null --max-time 60 https://esnaf101-superadmin.onrender.com/login || true
