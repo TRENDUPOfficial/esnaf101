@@ -22,4 +22,7 @@ ENV NODE_ENV=production
 COPY --from=build /repo /repo
 WORKDIR /repo/apps/api
 EXPOSE 3001
-CMD ["node", "dist/main.js"]
+# Container her başladığında bekleyen migration'ları uygular, sonra sunucuyu
+# başlatır — `prisma migrate deploy` idempotent olduğundan tekrar tekrar
+# çalıştırmak güvenli (yalnızca henüz uygulanmamış migration'ları uygular).
+CMD ["sh", "-c", "pnpm --filter @esnaf101/db exec prisma migrate deploy && node dist/main.js"]
