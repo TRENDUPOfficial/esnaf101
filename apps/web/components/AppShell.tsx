@@ -11,7 +11,17 @@ const NAV_ITEMS = [
   { href: "/orders", label: "Siparişler", icon: ReceiptIcon },
   { href: "/products", label: "Ürünler", icon: BoxIcon },
   { href: "/customers", label: "Müşteriler", icon: UsersIcon },
-  { href: "/integrations", label: "Entegrasyonlar", icon: PlugIcon },
+  {
+    href: "/integrations",
+    label: "Entegrasyonlar",
+    icon: PlugIcon,
+    children: [
+      { href: "/integrations#business", label: "İşletme ayarları" },
+      { href: "/integrations#whatsapp", label: "WhatsApp entegrasyonu" },
+      { href: "/integrations#invoicing", label: "Fatura entegrasyonu" },
+      { href: "/integrations#shipping", label: "Kargo entegrasyonu" },
+    ],
+  },
 ];
 
 export function AppShell({
@@ -39,16 +49,30 @@ export function AppShell({
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  active ? "bg-slate-800 text-amber-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-white"
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-                {item.label}
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    active ? "bg-slate-800 text-amber-400" : "text-slate-300 hover:bg-slate-800/60 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  {item.label}
+                </Link>
+                {active && "children" in item && item.children && (
+                  <div className="mt-1 space-y-0.5 border-l border-slate-800 pl-4">
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className="block rounded-md px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-white"
+                      >
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -84,6 +108,20 @@ export function AppShell({
           );
         })}
       </nav>
+
+      {pathname.startsWith("/integrations") && (
+        <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden">
+          {NAV_ITEMS.find((item) => item.href === "/integrations")?.children?.map((child) => (
+            <Link
+              key={child.href}
+              href={child.href}
+              className="whitespace-nowrap rounded-md bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-600"
+            >
+              {child.label}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {showIbanReminder && pathname !== "/integrations" && (
         <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 lg:px-8">

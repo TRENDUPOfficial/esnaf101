@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>
+    <div id={id} className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>
   );
 }
 

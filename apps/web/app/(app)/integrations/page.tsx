@@ -69,7 +69,7 @@ export default async function IntegrationsPage() {
       />
 
       <div className="space-y-6">
-        <Card>
+        <Card id="business" className="scroll-mt-28">
           <CardHeader title="İşletme ayarları" description="Müşterilere WhatsApp üzerinden ödeme talimatı gönderebilmek için IBAN'ınız gerekir." />
           <CardBody className="space-y-4">
             <form action={updateBusinessSettings} className="grid gap-3 sm:grid-cols-2">
@@ -110,7 +110,7 @@ export default async function IntegrationsPage() {
           </CardBody>
         </Card>
 
-        <Card>
+        <Card id="whatsapp" className="scroll-mt-28">
           <CardHeader title="WhatsApp" description="Sipariş otomasyonu için mesajlaşma ve ürünlerinizi WhatsApp'ta sergileyecek mağaza kataloğu." />
           <CardBody className="space-y-6">
             <div>
@@ -149,7 +149,7 @@ export default async function IntegrationsPage() {
           </CardBody>
         </Card>
 
-        <Card>
+        <Card id="invoicing" className="scroll-mt-28">
           <CardHeader title="Fatura sağlayıcıları" description="Sipariş fiyatı girildikten sonra otomatik e-fatura kesmek için bir sağlayıcı seçin." />
           <CardBody>
             <ProviderGrid
@@ -188,7 +188,7 @@ export default async function IntegrationsPage() {
           </CardBody>
         </Card>
 
-        <Card>
+        <Card id="shipping" className="scroll-mt-28">
           <CardHeader title="Kargo firmaları" description="Sipariş kargoya verildiğinde takip numarasını otomatik oluşturmak için bir firma seçin." />
           <CardBody>
             <ProviderGrid
