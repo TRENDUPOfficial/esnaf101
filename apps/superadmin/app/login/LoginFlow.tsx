@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import QRCode from "qrcode";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input, Label } from "../../components/ui/Field";
@@ -20,6 +21,16 @@ export function LoginFlow() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  useEffect(() => {
+    if (!otpAuthUrl) return;
+    // TOTP sırrı hiçbir zaman tarayıcı dışına (üçüncü bir servise) gönderilmez —
+    // QR kod tamamen istemci tarafında üretilir.
+    QRCode.toDataURL(otpAuthUrl, { width: 200, margin: 1 })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(""));
+  }, [otpAuthUrl]);
 
   async function handleCredentialsSubmit(event: FormEvent) {
     event.preventDefault();
@@ -112,9 +123,14 @@ export function LoginFlow() {
       <CardBody>
         <form onSubmit={handleCodeSubmit} className="space-y-4">
           {stage === "setup" && (
-            <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+            <div className="space-y-3 rounded-lg bg-slate-50 p-3">
+              {qrDataUrl && (
+                <img src={qrDataUrl} alt="TOTP QR kodu" className="mx-auto h-[200px] w-[200px]" />
+              )}
+              <p className="text-center text-xs text-slate-500">
+                Kare kodu okutamıyorsanız uygulamada &quot;elle gir&quot; ile aşağıdaki sırrı girin:
+              </p>
               <code className="block break-all text-xs text-slate-700">{secret}</code>
-              <p className="break-all text-xs text-slate-400">{otpAuthUrl}</p>
             </div>
           )}
           <div>
