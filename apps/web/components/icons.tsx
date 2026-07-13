@@ -100,3 +100,21 @@ export function BuildingIcon({ className = base }: IconProps) {
     </svg>
   );
 }
+
+export function ChevronDownIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function StoreIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 9V5.5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1V9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18l-1 3.2a2 2 0 0 1-2 1.4v6.4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-6.4a2 2 0 0 1-2-1.4L3 9Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 21v-4.5a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5V21" />
+    </svg>
+  );
+}
