@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { UserButton } from "@clerk/nextjs";
-import { BoxIcon, HomeIcon, PlugIcon, ReceiptIcon, UsersIcon } from "./icons";
+import { AlertIcon, BoxIcon, HomeIcon, PlugIcon, ReceiptIcon, UsersIcon } from "./icons";
 
 const NAV_ITEMS = [
   { href: "/", label: "Panel", icon: HomeIcon },
@@ -14,7 +14,15 @@ const NAV_ITEMS = [
   { href: "/integrations", label: "Entegrasyonlar", icon: PlugIcon },
 ];
 
-export function AppShell({ tenantName, children }: { tenantName: string; children: ReactNode }) {
+export function AppShell({
+  tenantName,
+  showIbanReminder,
+  children,
+}: {
+  tenantName: string;
+  showIbanReminder?: boolean;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
 
   return (
@@ -76,6 +84,18 @@ export function AppShell({ tenantName, children }: { tenantName: string; childre
           );
         })}
       </nav>
+
+      {showIbanReminder && pathname !== "/integrations" && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 lg:px-8">
+          <AlertIcon className="h-4 w-4 shrink-0" />
+          <span>
+            IBAN bilginiz eksik — müşterilere WhatsApp&apos;tan otomatik ödeme talimatı gönderilemez.{" "}
+            <Link href="/integrations" className="font-medium underline underline-offset-2">
+              Şimdi tamamla
+            </Link>
+          </span>
+        </div>
+      )}
 
       <main className="px-4 py-8 lg:px-8">{children}</main>
     </div>

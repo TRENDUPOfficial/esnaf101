@@ -596,3 +596,60 @@ Bundan sonraki doğal iş: kullanıcının gerçek bir Render hesabı açıp
 checklist'i), gerçek sağlayıcı hesaplarının (Meta WABA, Paraşüt, Shipentegra,
 iyzico) bağlanıp sandbox'ta uçtan uca test edilmesi, ve iyzico'nun gerçek
 imzalama mantığının yazılması.
+
+## Render'da ilk canlı deploy — bulunan/düzeltilen sorunlar
+
+Kullanıcı gerçek bir Render hesabı açıp Blueprint'i denedi; sırayla şu gerçek
+sorunlar bulunup düzeltildi (hepsi commit geçmişinde ayrı ayrı görülebilir):
+
+- Render'ın Blueprint şemasında servis seviyesinde `envVarGroups` alanı yok —
+  paylaşılan env değişkenleri `esnaf101-api`'ye doğrudan gömüldü.
+- `apps/worker`'ın Render'da ücretsiz planı yok (yalnızca web servisleri,
+  Postgres ve Key Value ücretsiz) — kart istemeden ilk deploy'u yapabilmek
+  için `render.yaml`'dan çıkarıldı; kart eklenip gerçek arka plan işleme
+  istendiğinde starter+ planla geri eklenmesi gerekiyor.
+- CI'da `pnpm/action-setup@v4`'ün `version` girdisiyle `package.json`daki
+  `packageManager` alanı çakışıyordu ("Multiple versions of pnpm specified") —
+  action'ın `version` girdisi kaldırıldı.
+- `ClerkAuthGuard` yalnızca eski düz `org_id`/`org_role` JWT claim'lerine
+  bakıyordu; Clerk'in yeni (v2) oturum token formatı bunu iç içe `o: {id, rol}`
+  nesnesine taşıyor ve `org_id`'yi `never` tipine sabitliyor — bu Clerk
+  projesi yeni formatı kullandığı için organizasyon hep "seçilmemiş"
+  görünüyordu. Guard artık her iki biçimi de okuyor.
+- **En büyük bulgu**: `apps/api/Dockerfile` `prisma generate` çalıştırıyordu
+  ama hiçbir zaman `prisma migrate deploy` çalıştırmıyordu — Render'daki
+  production Postgres'te tablolar hiç oluşmamıştı. API "ayakta" görünüyordu
+  çünkü çoğu hata `ClerkAuthGuard`da, hiç DB sorgusuna ulaşmadan patlıyordu.
+  Container başlangıcına `pnpm --filter @esnaf101/db exec prisma migrate
+  deploy && node dist/main.js` eklendi (idempotent, her restart'ta güvenli).
+
+İlk süper admin kaydı da prod veritabanına aynı şekilde elle eklendi (bkz.
+"Canlıya Alma Checklist" madde 5) — kullanıcının onayıyla, connection string
+paylaşılıp `platform_admins`e tek satır INSERT edildi.
+
+## Onboarding akışı sadeleştirildi: IBAN artık zorunlu bir ilk-ekran değil
+
+Kullanıcı geri bildirimi: satıcı organizasyon oluşturduktan hemen sonra
+karşısına çıkan zorunlu "işletme ayarları" (stok takibi + IBAN) formu, ilk
+izlenim için kötü bir karşılama ekranıydı — bunun yerine kullanıcı doğrudan
+gerçek panele (Panel/anasayfa) düşmeli, IBAN gibi ayarlar da WhatsApp/Paraşüt/
+Shipentegra gibi Entegrasyonlar sayfasından istenildiği zaman doldurulmalı.
+
+Yapılan değişiklik:
+- Clerk webhook'u artık tenant'ı doğrudan `active` durumda oluşturuyor
+  (`pending_onboarding` durumu artık yeni tenant'lar için kullanılmıyor,
+  enum'da geriye dönük uyumluluk için duruyor).
+- `apps/web/app/(app)/layout.tsx`deki zorunlu `/onboarding/settings`
+  yönlendirmesi kaldırıldı; `app/onboarding/settings/` sayfası tamamen
+  silindi. `<CreateOrganization afterCreateOrganizationUrl="/" />` — artık
+  organizasyon oluşturunca doğrudan panele düşülüyor.
+- IBAN/stok takibi formu `apps/web/app/(app)/integrations/page.tsx`e "İşletme
+  ayarları" kartı olarak taşındı (`updateBusinessSettings` server action,
+  `PATCH /tenants/me/settings` — eski `PATCH /tenants/me/onboarding`dan
+  yeniden adlandırıldı, `UpdateTenantSettingsDto`daki tüm alanlar artık
+  isteğe bağlı).
+- IBAN girilmemişse `AppShell` üstte "IBAN bilginiz eksik..." uyarı şeridi
+  gösteriyor (Entegrasyonlar sayfasına link veriyor, o sayfadayken
+  gizleniyor) — WhatsApp/Paraşüt/Shipentegra'daki "tanımlı değil" rozeti ile
+  aynı felsefe: eksik ayar sistemi durdurmuyor, sadece ilgili özelliği pasif
+  bırakıyor ve kullanıcıyı nazikçe uyarıyor.

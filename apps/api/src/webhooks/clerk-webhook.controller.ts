@@ -31,9 +31,10 @@ interface ClerkOrganizationData {
 
 /**
  * Clerk, bir kullanıcı onboarding sırasında yeni bir organizasyon
- * oluşturduğunda bu webhook'u tetikler. Tenant kaydını burada oluşturuyoruz
- * (durum: pending_onboarding) — panel tarafındaki onboarding formu daha sonra
- * stok takibi tercihini ve IBAN bilgisini tamamlayıp tenant'ı `active`e alır.
+ * oluşturduğunda bu webhook'u tetikler. Tenant kaydını burada doğrudan
+ * `active` durumda oluşturuyoruz — stok takibi tercihi ve IBAN bilgisi
+ * zorunlu bir ön koşul değil, panelin Entegrasyonlar sayfasından istenildiği
+ * zaman doldurulabilen isteğe bağlı ayarlar (bkz. TenantsService.updateSettings).
  */
 @Controller("webhooks/clerk")
 export class ClerkWebhookController {
@@ -77,7 +78,7 @@ export class ClerkWebhookController {
           clerkOrgId: id,
           name,
           slug,
-          status: "pending_onboarding",
+          status: "active",
         },
       });
     }

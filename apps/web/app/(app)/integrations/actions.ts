@@ -8,6 +8,21 @@ function strOrUndefined(formData: FormData, key: string): string | undefined {
   return v || undefined;
 }
 
+export async function updateBusinessSettings(formData: FormData) {
+  const iban = strOrUndefined(formData, "iban")?.replace(/\s+/g, "").toUpperCase();
+  const ibanAccountHolder = strOrUndefined(formData, "ibanAccountHolder");
+
+  await serverApiFetch("/tenants/me/settings", {
+    method: "PATCH",
+    body: JSON.stringify({
+      stockTrackingEnabled: formData.get("stockTrackingEnabled") === "on",
+      ...(iban ? { iban } : {}),
+      ...(ibanAccountHolder ? { ibanAccountHolder } : {}),
+    }),
+  });
+  revalidatePath("/integrations");
+}
+
 export async function updateWhatsApp(formData: FormData) {
   await serverApiFetch("/integrations/me", {
     method: "PATCH",

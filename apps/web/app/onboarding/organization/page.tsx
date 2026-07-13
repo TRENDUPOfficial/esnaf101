@@ -10,7 +10,7 @@ export default function CreateOrganizationPage() {
           Esnaf101&apos;i kullanabilmek için önce işletmenizi (satıcı hesabınızı) tanımlamanız gerekiyor.
         </p>
       </div>
-      <CreateOrganization afterCreateOrganizationUrl="/onboarding/settings" skipInvitationScreen />
+      <CreateOrganization afterCreateOrganizationUrl="/" skipInvitationScreen />
     </CenteredLayout>
   );
 }

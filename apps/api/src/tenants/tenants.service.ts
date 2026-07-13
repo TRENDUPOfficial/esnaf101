@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaClient, Tenant } from "@esnaf101/db";
-import { CompleteOnboardingDto } from "./dto/complete-onboarding.dto";
+import { UpdateTenantSettingsDto } from "./dto/update-tenant-settings.dto";
 
 @Injectable()
 export class TenantsService {
@@ -13,28 +13,16 @@ export class TenantsService {
     return { tenant, settings };
   }
 
-  async completeOnboarding(tenant: Tenant, dto: CompleteOnboardingDto) {
-    const [, updatedTenant] = await this.prisma.$transaction([
-      this.prisma.tenantSettings.upsert({
-        where: { tenantId: tenant.id },
-        update: {
-          stockTrackingEnabled: dto.stockTrackingEnabled,
-          iban: dto.iban,
-          ibanAccountHolder: dto.ibanAccountHolder,
-        },
-        create: {
-          tenantId: tenant.id,
-          stockTrackingEnabled: dto.stockTrackingEnabled,
-          iban: dto.iban,
-          ibanAccountHolder: dto.ibanAccountHolder,
-        },
-      }),
-      this.prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { status: "active" },
-      }),
-    ]);
-
-    return updatedTenant;
+  async updateSettings(tenant: Tenant, dto: UpdateTenantSettingsDto) {
+    return this.prisma.tenantSettings.upsert({
+      where: { tenantId: tenant.id },
+      update: dto,
+      create: {
+        tenantId: tenant.id,
+        stockTrackingEnabled: dto.stockTrackingEnabled ?? false,
+        iban: dto.iban,
+        ibanAccountHolder: dto.ibanAccountHolder,
+      },
+    });
   }
 }
